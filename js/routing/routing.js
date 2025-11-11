@@ -6,7 +6,10 @@ import { setupUIHandlers } from './routingUI.js';
 import { setupHeightgraphHandlers, drawHeightgraph, cleanupHeightgraphHandlers } from './heightgraph.js';
 import { setupRouteHover, updateRouteColor } from './routeVisualization.js';
 
-const GRAPHHOPPER_URL = 'http://localhost:8989';
+// const GRAPHHOPPER_URL = 'http://localhost:8989';
+const GRAPHHOPPER_URL = 'https://ghroute.duckdns.org';
+
+
 
 // Flag to prevent parallel route calculations
 let routeCalculationInProgress = false;
