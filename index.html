@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+  <meta charset="utf-8" />
+  <title>MapLibre GraphHopper Routing</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <link rel='stylesheet' href='https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css' />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div id="map"></div>
+
+  <!-- Routing Control Panel -->
+  <div class="routing-panel">
+    <div class="routing-header">
+      <div class="profile-selector">
+        <button class="profile-btn active" data-profile="car" title="Auto">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 17h14l-1-7H6l-1 7z"/>
+            <circle cx="7" cy="20" r="2"/>
+            <circle cx="17" cy="20" r="2"/>
+            <path d="M7 17V9a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v8"/>
+          </svg>
+        </button>
+        <button class="profile-btn" data-profile="car_custom" title="Auto (Custom)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <!-- Auto -->
+            <path d="M5 17h14l-1-7H6l-1 7z"/>
+            <circle cx="7" cy="20" r="2"/>
+            <circle cx="17" cy="20" r="2"/>
+            <path d="M7 17V9a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v8"/>
+            <!-- Kamera -->
+            <path d="M19 7h-4l-2-3H9L7 7H3a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
+            <circle cx="12" cy="13" r="3"/>
+          </svg>
+        </button>
+        <button class="profile-btn" data-profile="bike" title="Fahrrad">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="5.5" cy="17.5" r="3.5"/>
+            <circle cx="18.5" cy="17.5" r="3.5"/>
+            <path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
+            <path d="M12 17.5V14l-3-3 4-3 2 3h3"/>
+          </svg>
+        </button>
+        <button class="profile-btn" data-profile="my_bike_cycleways" title="Kinderfahrrad">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="5.5" cy="17.5" r="2.5"/>
+            <circle cx="18.5" cy="17.5" r="2.5"/>
+            <path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
+            <path d="M12 17.5V14l-2.5-2.5 3-2 1.5 2h2"/>
+            <path d="M9 10h1"/>
+          </svg>
+        </button>
+        <button class="profile-btn" data-profile="cargo_bike" title="Lastenrad">
+          <svg width="20" height="20" viewBox="0 0 30 30" fill="currentColor">
+            <path d="M14 4 A 1.0001 1.0001 0 0 0 13.033203 5.2578125L16.697266 19L15.732422 19 A 2 2 0 0 0 14.304688 18.023438L8.8828125 10L10 10 A 1.0001 1.0001 0 1 0 10 8L7.1386719 8 A 1.0001 1.0001 0 0 0 6.8457031 8L6 8 A 1.0001 1.0001 0 1 0 6 10L6.46875 10L7.0117188 10.802734L5.5742188 15.115234C5.3727504 15.093484 5.2115442 15 5 15C3.4166671 15 2.1018922 15.629756 1.2519531 16.585938C0.40201405 17.542119 1.4802974e-16 18.777778 0 20C0 21.222222 0.40201404 22.457881 1.2519531 23.414062C2.1018922 24.370244 3.4166671 25 5 25C6.5833329 25 7.8981078 24.370244 8.7480469 23.414062C9.3627521 22.722519 9.6664109 21.873192 9.8300781 21L12.267578 21 A 2 2 0 0 0 14 22 A 2 2 0 0 0 15.728516 21L17.845703 21 A 1.0001 1.0001 0 0 0 18.164062 21L19.169922 21C19.333589 21.873192 19.637248 22.72252 20.251953 23.414062C21.101892 24.370244 22.416667 25 24 25C25.583333 25 26.898108 24.370244 27.748047 23.414062C28.421836 22.65605 28.803837 21.72117 28.9375 20.757812C29.567493 20.42121 30 19.764525 30 19L30 14.798828C30 14.331828 29.676703 13.927219 29.220703 13.824219L16.630859 10.982422L15.302734 6L17 6 A 1.0001 1.0001 0 1 0 17 4L14 4 z M 8.4238281 12.892578L12.408203 18.791016 A 2 2 0 0 0 12.271484 19L9.8300781 19C9.6664109 18.126808 9.3627521 17.277481 8.7480469 16.585938C8.4147953 16.211029 7.9583636 15.937843 7.4941406 15.681641L8.4238281 12.892578 z M 24 17C25.083333 17 25.768559 17.370244 26.251953 17.914062C26.735347 18.457881 27 19.222222 27 20C27 20.777778 26.735347 21.542119 26.251953 22.085938C25.768559 22.629756 25.083333 23 24 23C22.916667 23 22.231441 22.629756 21.748047 22.085938C21.272334 21.55076 21.019964 20.798142 21.011719 20.033203 A 1.0001 1.0001 0 0 0 21.011719 19.964844C21.020419 19.200578 21.272735 18.448789 21.748047 17.914062C22.231441 17.370245 22.916667 17 24 17 z M 4.9414062 17.011719L4.0507812 19.683594 A 1.0005644 1.0005644 0 1 0 5.9492188 20.316406L6.8476562 17.619141C6.9785252 17.721391 7.143618 17.792185 7.2519531 17.914062C7.7276662 18.44924 7.9800358 19.201858 7.9882812 19.966797 A 1.0001 1.0001 0 0 0 7.9882812 20.035156C7.9796133 20.79942 7.7272651 21.55121 7.2519531 22.085938C6.7685595 22.629756 6.0833326 23 5 23C3.9166674 23 3.2314405 22.629756 2.7480469 22.085938C2.2646532 21.542119 2 20.777778 2 20C2 19.222222 2.2646532 18.457881 2.7480469 17.914062C3.2209393 17.382058 3.8984121 17.027377 4.9414062 17.011719 z M 24 19 A 1 1 0 0 0 24 21 A 1 1 0 0 0 24 19 z"/>
+          </svg>
+        </button>
+      </div>
+      <button class="btn-close" id="close-routing-panel" title="Schließen">×</button>
+    </div>
+    
+    <div class="routing-content">
+      <div class="routing-input-group">
+        <label for="start-input">Start:</label>
+        <div class="input-with-button">
+          <input type="text" id="start-input" placeholder="Adresse oder Koordinaten" />
+          <button id="set-start" class="btn-set-point btn-set-start" title="Startpunkt auf Karte setzen">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+              <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+          </button>
+        </div>
+      </div>
+      
+      <div class="routing-input-group">
+        <label for="end-input">Ziel:</label>
+        <div class="input-with-button">
+          <input type="text" id="end-input" placeholder="Adresse oder Koordinaten" />
+          <button id="set-end" class="btn-set-point btn-set-end" title="Zielpunkt auf Karte setzen">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+              <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+          </button>
+        </div>
+      </div>
+      
+      <div class="routing-buttons">
+        <button id="calculate-route" class="btn-primary">Route berechnen</button>
+        <button id="clear-route" class="btn-secondary">Löschen</button>
+      </div>
+      
+      <div id="route-info" class="route-info"></div>
+      <div id="heightgraph-container" class="heightgraph-container">
+        <div class="heightgraph-header">
+          <span>Höhenprofil</span>
+          <select id="heightgraph-encoded-select" class="heightgraph-select">
+            <option value="custom_present">Custom Present</option>
+          </select>
+        </div>
+        <div style="position: relative;">
+          <canvas id="heightgraph-canvas"></canvas>
+          <canvas id="heightgraph-indicator-canvas" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Context Panel: Combined -->
+  <div class="context-panel">
+    <div class="context-header">
+      <div class="context-title">
+        <span>Kontext-Layer</span>
+      </div>
+    </div>
+    
+    <div class="context-content">
+      <!-- Missing Streets Segment -->
+      <div class="context-segment">
+        <div class="context-segment-header" id="toggle-missing-streets-segment">
+          <div class="context-segment-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="context-icon">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+              <circle cx="12" cy="13" r="4"></circle>
+            </svg>
+            <span>Straßensegmente mit...</span>
+          </div>
+          <button class="btn-segment-toggle" title="Ein-/Ausblenden">▼</button>
+        </div>
+        
+        <div class="context-segment-content" id="missing-streets-segment-content">
+          <div class="context-toggle">
+            <label>
+              <input type="checkbox" id="toggle-missing-streets" />
+              <span>Fehlende Straßen anzeigen</span>
+              <span class="info-icon-small" title="Quelle: OSM Mapillary Missing Streets; tilda-geo.de">ⓘ</span>
+            </label>
+          </div>
+
+          <div class="bikelanes-legend" id="missing-streets-legend">
+            <div class="legend-item">
+              <span class="legend-line solid" style="background: #174ed9;"></span>
+              <span class="legend-text">...ausreichend Panorama-Fotos</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-line solid" style="background: #0098f0;"></span>
+              <span class="legend-text">...ausreichend regulären Fotos</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-line solid" style="background: #e91e63;"></span>
+              <span class="legend-text">...fehlenden Fotos</span>
+            </div>
+            
+            <div class="context-footer">
+              <span>Mehr auf 
+                <a href="https://www.osm-verkehrswende.org/mapillary/map/" target="_blank" rel="noopener">osm-verkehrswende.org</a>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bike Lanes Segment -->
+      <div class="context-segment">
+        <div class="context-segment-header" id="toggle-bikelanes-segment">
+          <div class="context-segment-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="context-icon">
+              <circle cx="5.5" cy="17.5" r="3.5"/>
+              <circle cx="18.5" cy="17.5" r="3.5"/>
+              <path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
+              <path d="M12 17.5V14l-3-3 4-3 2 3h3"/>
+            </svg>
+            <span>Radinfrastruktur</span>
+          </div>
+          <button class="btn-segment-toggle" title="Ein-/Ausblenden">▶</button>
+        </div>
+        
+        <div class="context-segment-content collapsed" id="bikelanes-segment-content">
+          <div class="context-toggle">
+            <label>
+              <input type="checkbox" id="toggle-bikelanes" />
+              <span>Radinfrastruktur anzeigen</span>
+              <span class="info-icon-small" title="Quelle: © OpenStreetMap; tilda-geo.de">ⓘ</span>
+            </label>
+          </div>
+
+          <div class="bikelanes-legend" id="bikelanes-legend">
+            <div class="legend-item">
+              <span class="legend-line solid" style="background: #174ed9;"></span>
+              <span class="legend-text">Führung baul. abgesetzt von Kfz</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-line solid" style="background: #0098f0;"></span>
+              <span class="legend-text">Führung eigenständig auf Fahrbahn</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-line dashed" style="--line-color: #174ed9;"></span>
+              <span class="legend-text">Führung mit Fußverkehr</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-line dashed" style="--line-color: #9fb9f9;"></span>
+              <span class="legend-text">Fußverkehr mit Rad frei</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-line dashed" style="--line-color: #0098f0;"></span>
+              <span class="legend-text">Führung mit Kfz (explizit)</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-line dashed" style="--line-color: #a97bea;"></span>
+              <span class="legend-text">Führungsform unklar</span>
+            </div>
+            
+            <div class="context-footer">
+              <span>Mehr auf 
+                <a href="https://tilda-geo.de/regionen/radinfra" target="_blank" rel="noopener">radinfra.de</a>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Left UI Container -->
+  <div id="bottom-left-ui-container">
+    <div id="custom-nav-control"></div>
+
+    <div id="basemap-thumbnails">
+      <div class="basemap-thumb selected" data-map="standard" title="Standard"></div>
+      <div class="basemap-thumb" data-map="satellite" title="Satellit"></div>
+    </div>
+
+    <div id="terrain-controls">
+      <label><input type="checkbox" id="toggleTerrain" /> Terrain</label>
+      <label><input type="checkbox" id="toggleHillshade" /> Hillshade</label>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
+  <script type="module" src="./main.js"></script>
+</body>
+
+</html>
