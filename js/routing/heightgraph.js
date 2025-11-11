@@ -2,6 +2,7 @@
 
 import { routeState } from './routeState.js';
 import { updateRouteColor } from './routeVisualization.js';
+import { getSurfaceColorRgba, getRoadClassColorRgba } from './colorSchemes.js';
 
 // Store event handlers to prevent duplicate listeners
 let heightgraphMouseMoveHandler = null;
@@ -51,6 +52,51 @@ export function setupHeightgraphHandlers() {
   };
   
   window.addEventListener('resize', heightgraphResizeHandler);
+}
+
+// Cleanup function to remove all event handlers
+export function cleanupHeightgraphHandlers() {
+  const canvas = document.getElementById('heightgraph-canvas');
+  
+  // Remove mouse event handlers
+  if (canvas && heightgraphMouseMoveHandler) {
+    canvas.removeEventListener('mousemove', heightgraphMouseMoveHandler);
+    heightgraphMouseMoveHandler = null;
+  }
+  if (canvas && heightgraphMouseLeaveHandler) {
+    canvas.removeEventListener('mouseleave', heightgraphMouseLeaveHandler);
+    heightgraphMouseLeaveHandler = null;
+  }
+  
+  // Remove resize handler
+  if (heightgraphResizeHandler) {
+    window.removeEventListener('resize', heightgraphResizeHandler);
+    if (heightgraphResizeHandler.timeout) {
+      clearTimeout(heightgraphResizeHandler.timeout);
+    }
+    heightgraphResizeHandler = null;
+  }
+  
+  // Clear indicator canvas
+  const indicatorCanvas = document.getElementById('heightgraph-indicator-canvas');
+  if (indicatorCanvas) {
+    const ctx = indicatorCanvas.getContext('2d');
+    ctx.clearRect(0, 0, indicatorCanvas.width, indicatorCanvas.height);
+  }
+  
+  // Remove tooltip if it exists
+  const tooltip = document.getElementById('heightgraph-tooltip');
+  if (tooltip) {
+    tooltip.remove();
+  }
+  
+  // Clear hover point on map
+  if (routeState.mapInstance && routeState.mapInstance.getSource('heightgraph-hover-point')) {
+    routeState.mapInstance.getSource('heightgraph-hover-point').setData({
+      type: 'FeatureCollection',
+      features: []
+    });
+  }
 }
 
 export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, coordinates = [], skipInteractivity = false) {
@@ -598,110 +644,23 @@ export function updateHeightgraphStats(encodedType, encodedValues) {
   statsContainer.style.display = 'flex';
 }
 
-// Helper function to get color for surface value (for heightgraph fill)
-function getSurfaceColor(surfaceValue) {
-  if (!surfaceValue) return 'rgba(156, 163, 175, 0.3)'; // Gray for null/undefined
-  
-  const surfaceColors = {
-    'asphalt': 'rgba(34, 197, 94, 0.3)',      // Green
-    'concrete': 'rgba(249, 115, 22, 0.3)',     // Orange
-    'paved': 'rgba(59, 130, 246, 0.3)',       // Blue
-    'unpaved': 'rgba(168, 85, 247, 0.3)',     // Purple
-    'gravel': 'rgba(236, 72, 153, 0.3)',      // Pink
-    'dirt': 'rgba(120, 53, 15, 0.3)',         // Brown
-    'sand': 'rgba(234, 179, 8, 0.3)',         // Yellow
-    'grass': 'rgba(22, 163, 74, 0.3)',        // Dark green
-    'ground': 'rgba(120, 53, 15, 0.3)',       // Brown
-    'compacted': 'rgba(107, 114, 128, 0.3)',  // Gray
-    'fine_gravel': 'rgba(251, 146, 60, 0.3)', // Light orange
-    'pebblestone': 'rgba(168, 85, 247, 0.3)',  // Purple
-    'cobblestone': 'rgba(99, 102, 241, 0.3)', // Indigo
-    'wood': 'rgba(180, 83, 9, 0.3)',          // Dark orange
-    'metal': 'rgba(71, 85, 105, 0.3)',        // Slate
-    'sett': 'rgba(99, 102, 241, 0.3)',        // Indigo
-    'paving_stones': 'rgba(14, 165, 233, 0.3)' // Sky blue
-  };
-  
-  const normalizedValue = String(surfaceValue).toLowerCase();
-  return surfaceColors[normalizedValue] || 'rgba(156, 163, 175, 0.3)'; // Default gray
-}
-
-// Helper function to get background color for surface value in stats (lighter version)
+// Color functions are now imported from colorSchemes.js
+// Local helper functions for stats (use lighter opacity)
 function getSurfaceColorForStats(surfaceValue) {
-  if (!surfaceValue) return 'rgba(156, 163, 175, 0.15)'; // Gray for null/undefined
-  
-  const surfaceColors = {
-    'asphalt': 'rgba(34, 197, 94, 0.15)',      // Green
-    'concrete': 'rgba(249, 115, 22, 0.15)',     // Orange
-    'paved': 'rgba(59, 130, 246, 0.15)',       // Blue
-    'unpaved': 'rgba(168, 85, 247, 0.15)',     // Purple
-    'gravel': 'rgba(236, 72, 153, 0.15)',      // Pink
-    'dirt': 'rgba(120, 53, 15, 0.15)',         // Brown
-    'sand': 'rgba(234, 179, 8, 0.15)',         // Yellow
-    'grass': 'rgba(22, 163, 74, 0.15)',        // Dark green
-    'ground': 'rgba(120, 53, 15, 0.15)',       // Brown
-    'compacted': 'rgba(107, 114, 128, 0.15)',  // Gray
-    'fine_gravel': 'rgba(251, 146, 60, 0.15)', // Light orange
-    'pebblestone': 'rgba(168, 85, 247, 0.15)',  // Purple
-    'cobblestone': 'rgba(99, 102, 241, 0.15)', // Indigo
-    'wood': 'rgba(180, 83, 9, 0.15)',          // Dark orange
-    'metal': 'rgba(71, 85, 105, 0.15)',        // Slate
-    'sett': 'rgba(99, 102, 241, 0.15)',        // Indigo
-    'paving_stones': 'rgba(14, 165, 233, 0.15)' // Sky blue
-  };
-  
-  const normalizedValue = String(surfaceValue).toLowerCase();
-  return surfaceColors[normalizedValue] || 'rgba(156, 163, 175, 0.15)'; // Default gray
+  return getSurfaceColorRgba(surfaceValue, 0.15);
 }
 
-// Helper function to get color for road_class value (for heightgraph fill)
-function getRoadClassColor(roadClassValue) {
-  if (!roadClassValue) return 'rgba(156, 163, 175, 0.3)'; // Gray for null/undefined
-  
-  const roadClassColors = {
-    'motorway': 'rgba(220, 38, 38, 0.3)',      // Red
-    'trunk': 'rgba(239, 68, 68, 0.3)',         // Light red
-    'primary': 'rgba(249, 115, 22, 0.3)',      // Orange
-    'secondary': 'rgba(234, 179, 8, 0.3)',     // Yellow
-    'tertiary': 'rgba(34, 197, 94, 0.3)',      // Green
-    'unclassified': 'rgba(59, 130, 246, 0.3)', // Blue
-    'residential': 'rgba(168, 85, 247, 0.3)',   // Purple
-    'service': 'rgba(236, 72, 153, 0.3)',      // Pink
-    'track': 'rgba(120, 53, 15, 0.3)',         // Brown
-    'path': 'rgba(107, 114, 128, 0.3)',        // Gray
-    'cycleway': 'rgba(14, 165, 233, 0.3)',    // Sky blue
-    'footway': 'rgba(22, 163, 74, 0.3)',       // Dark green
-    'steps': 'rgba(180, 83, 9, 0.3)',          // Dark orange
-    'living_street': 'rgba(251, 146, 60, 0.3)' // Light orange
-  };
-  
-  const normalizedValue = String(roadClassValue).toLowerCase();
-  return roadClassColors[normalizedValue] || 'rgba(156, 163, 175, 0.3)'; // Default gray
-}
-
-// Helper function to get background color for road_class value in stats (lighter version)
 function getRoadClassColorForStats(roadClassValue) {
-  if (!roadClassValue) return 'rgba(156, 163, 175, 0.15)'; // Gray for null/undefined
-  
-  const roadClassColors = {
-    'motorway': 'rgba(220, 38, 38, 0.15)',      // Red
-    'trunk': 'rgba(239, 68, 68, 0.15)',         // Light red
-    'primary': 'rgba(249, 115, 22, 0.15)',      // Orange
-    'secondary': 'rgba(234, 179, 8, 0.15)',     // Yellow
-    'tertiary': 'rgba(34, 197, 94, 0.15)',      // Green
-    'unclassified': 'rgba(59, 130, 246, 0.15)', // Blue
-    'residential': 'rgba(168, 85, 247, 0.15)',   // Purple
-    'service': 'rgba(236, 72, 153, 0.15)',      // Pink
-    'track': 'rgba(120, 53, 15, 0.15)',         // Brown
-    'path': 'rgba(107, 114, 128, 0.15)',        // Gray
-    'cycleway': 'rgba(14, 165, 233, 0.15)',    // Sky blue
-    'footway': 'rgba(22, 163, 74, 0.15)',       // Dark green
-    'steps': 'rgba(180, 83, 9, 0.15)',          // Dark orange
-    'living_street': 'rgba(251, 146, 60, 0.15)' // Light orange
-  };
-  
-  const normalizedValue = String(roadClassValue).toLowerCase();
-  return roadClassColors[normalizedValue] || 'rgba(156, 163, 175, 0.15)'; // Default gray
+  return getRoadClassColorRgba(roadClassValue, 0.15);
+}
+
+// For heightgraph fill (use standard opacity)
+function getSurfaceColor(surfaceValue) {
+  return getSurfaceColorRgba(surfaceValue, 0.3);
+}
+
+function getRoadClassColor(roadClassValue) {
+  return getRoadClassColorRgba(roadClassValue, 0.3);
 }
 
 function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordinates) {

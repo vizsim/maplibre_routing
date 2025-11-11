@@ -3,10 +3,30 @@
 
 import { routeState } from './routeState.js';
 import { setupUIHandlers } from './routingUI.js';
-import { setupHeightgraphHandlers, drawHeightgraph } from './heightgraph.js';
+import { setupHeightgraphHandlers, drawHeightgraph, cleanupHeightgraphHandlers } from './heightgraph.js';
 import { setupRouteHover, updateRouteColor } from './routeVisualization.js';
 
 const GRAPHHOPPER_URL = 'http://localhost:8989';
+
+// Flag to prevent parallel route calculations
+let routeCalculationInProgress = false;
+
+// Validate coordinates before route calculation
+function validateCoordinates(coord, name) {
+  if (!Array.isArray(coord) || coord.length < 2) {
+    throw new Error(`${name}: Koordinaten müssen ein Array mit mindestens 2 Werten sein`);
+  }
+  const [lng, lat] = coord;
+  if (typeof lng !== 'number' || typeof lat !== 'number') {
+    throw new Error(`${name}: Länge und Breite müssen Zahlen sein`);
+  }
+  if (lng < -180 || lng > 180) {
+    throw new Error(`${name}: Länge muss zwischen -180 und 180 liegen`);
+  }
+  if (lat < -90 || lat > 90) {
+    throw new Error(`${name}: Breite muss zwischen -90 und 90 liegen`);
+  }
+}
 
 export function setupRouting(map) {
   routeState.init(map);
@@ -116,6 +136,17 @@ export function setupRouting(map) {
 }
 
 export async function calculateRoute(map, start, end) {
+  // Prevent parallel route calculations
+  if (routeCalculationInProgress) {
+    console.warn('Route-Berechnung bereits in Arbeit, ignoriere neue Anfrage');
+    return;
+  }
+  
+  // Validate coordinates
+  validateCoordinates(start, 'Startpunkt');
+  validateCoordinates(end, 'Endpunkt');
+  
+  routeCalculationInProgress = true;
   const calculateBtn = document.getElementById('calculate-route');
   const routeInfo = document.getElementById('route-info');
   
@@ -509,6 +540,7 @@ export async function calculateRoute(map, start, end) {
     }
     alert(`Fehler beim Berechnen der Route: ${error.message}`);
   } finally {
+    routeCalculationInProgress = false;
     if (calculateBtn) {
       calculateBtn.disabled = false;
       calculateBtn.textContent = 'Route berechnen';
@@ -517,6 +549,9 @@ export async function calculateRoute(map, start, end) {
 }
 
 export function clearRoute(map) {
+  // Cleanup heightgraph event handlers
+  cleanupHeightgraphHandlers();
+  
   routeState.reset();
   map.getCanvas().style.cursor = '';
   

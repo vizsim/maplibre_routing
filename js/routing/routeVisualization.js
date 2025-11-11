@@ -1,6 +1,7 @@
 // Route visualization: colors, hover effects, custom_present highlighting
 
 import { routeState } from './routeState.js';
+import { getColorForEncodedValue } from './colorSchemes.js';
 
 export function setupRouteHover(map) {
   // Create a popup for showing encoded values on hover
@@ -113,84 +114,7 @@ export function setupRouteHover(map) {
   });
 }
 
-// Helper function to get color for encoded value
-function getColorForEncodedValue(encodedType, value, allValues = []) {
-  if (value === null || value === undefined) {
-    return '#9ca3af'; // Gray for null/undefined
-  }
-  
-  if (encodedType === 'custom_present') {
-    const isCustomPresent = value === true || value === 'True' || value === 'true';
-    return isCustomPresent ? '#3b82f6' : '#ec4899'; // Blue for true, Pink for false
-  }
-  
-  if (encodedType === 'surface') {
-    const surfaceColors = {
-      'asphalt': '#22c55e',      // Green
-      'concrete': '#f97316',      // Orange
-      'paved': '#3b82f6',        // Blue
-      'unpaved': '#a855f7',       // Purple
-      'gravel': '#ec4899',        // Pink
-      'dirt': '#78350f',          // Brown
-      'sand': '#eab308',          // Yellow
-      'grass': '#16a34a',         // Dark green
-      'ground': '#78350f',        // Brown
-      'compacted': '#6b7280',     // Gray
-      'fine_gravel': '#fb923c',   // Light orange
-      'pebblestone': '#a855f7',  // Purple
-      'cobblestone': '#6366f1',   // Indigo
-      'wood': '#b45309',          // Dark orange
-      'metal': '#475569',         // Slate
-      'sett': '#6366f1',          // Indigo
-      'paving_stones': '#0ea5e9'  // Sky blue
-    };
-    const normalizedValue = String(value).toLowerCase();
-    return surfaceColors[normalizedValue] || '#9ca3af'; // Default gray
-  }
-  
-  if (encodedType === 'road_class') {
-    const roadClassColors = {
-      'motorway': '#dc2626',      // Red
-      'trunk': '#ef4444',         // Light red
-      'primary': '#f97316',       // Orange
-      'secondary': '#eab308',      // Yellow
-      'tertiary': '#22c55e',      // Green
-      'unclassified': '#3b82f6',  // Blue
-      'residential': '#a855f7',   // Purple
-      'service': '#ec4899',        // Pink
-      'track': '#78350f',         // Brown
-      'path': '#6b7280',          // Gray
-      'cycleway': '#0ea5e9',      // Sky blue
-      'footway': '#16a34a',       // Dark green
-      'steps': '#b45309',         // Dark orange
-      'living_street': '#fb923c'  // Light orange
-    };
-    const normalizedValue = String(value).toLowerCase();
-    return roadClassColors[normalizedValue] || '#9ca3af'; // Default gray
-  }
-  
-  if (encodedType === 'elevation' || encodedType === 'time' || encodedType === 'distance') {
-    // Numeric data - use gradient color
-    const validValues = allValues.filter(v => v !== null && v !== undefined);
-    if (validValues.length === 0) return '#3b82f6';
-    
-    const minValue = Math.min(...validValues);
-    const maxValue = Math.max(...validValues);
-    const range = maxValue - minValue || 1;
-    const normalized = (value - minValue) / range;
-    
-    if (normalized < 0.25) return '#3b82f6'; // Blue
-    else if (normalized < 0.5) return '#10b981'; // Green
-    else if (normalized < 0.75) return '#f59e0b'; // Orange
-    else return '#ef4444'; // Red
-  }
-  
-  // Categorical data - assign colors based on unique values
-  const uniqueValues = [...new Set(allValues.filter(v => v !== null && v !== undefined && v !== ''))];
-  const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6'];
-  const valueIndex = uniqueValues.indexOf(value);
-  return valueIndex >= 0 ? colors[valueIndex % colors.length] : '#9ca3af';
-}
+// Color function is now imported from colorSchemes.js
 
 export function updateRouteColor(encodedType, encodedValues) {
   if (!routeState.mapInstance || !routeState.currentRouteData) return;
