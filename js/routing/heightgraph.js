@@ -19,6 +19,8 @@ export function setupHeightgraphHandlers() {
         drawHeightgraph(elevations || [], distance, encodedValues || {}, routeState.currentRouteData?.coordinates || []);
         // Update route color on map
         updateRouteColor(routeState.currentEncodedType, encodedValues || {});
+        // Update stats
+        updateHeightgraphStats(routeState.currentEncodedType, encodedValues || {});
       }
     });
   }
@@ -387,9 +389,114 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
     }
     setupHeightgraphInteractivity(canvas, baseData, totalDistance, coordinates);
   }
+  
+  // Update stats
+  const statsSelectedType = select ? select.value : 'custom_present';
+  updateHeightgraphStats(statsSelectedType, encodedValues);
 }
 
-// Helper function to get color for surface value
+// Helper function to calculate distance between two coordinates (Haversine formula)
+function calculateDistance(coord1, coord2) {
+  const R = 6371000; // Earth radius in meters
+  const lat1 = coord1[1] * Math.PI / 180;
+  const lat2 = coord2[1] * Math.PI / 180;
+  const deltaLat = (coord2[1] - coord1[1]) * Math.PI / 180;
+  const deltaLon = (coord2[0] - coord1[0]) * Math.PI / 180;
+  
+  const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+            Math.cos(lat1) * Math.cos(lat2) *
+            Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  
+  return R * c;
+}
+
+// Calculate and display statistics for the selected encoded value
+export function updateHeightgraphStats(encodedType, encodedValues) {
+  const statsContainer = document.getElementById('heightgraph-stats');
+  if (!statsContainer || !routeState.currentRouteData) {
+    return;
+  }
+  
+  const { encodedValues: allEncodedValues, coordinates } = routeState.currentRouteData;
+  const data = allEncodedValues[encodedType];
+  
+  if (!data || data.length === 0 || !coordinates || coordinates.length === 0) {
+    statsContainer.innerHTML = '';
+    statsContainer.style.display = 'none';
+    return;
+  }
+  
+  // Calculate distance sums for each value
+  // Instead of using distance array (which contains segment distances), 
+  // calculate actual distances between consecutive coordinates
+  const valueDistances = {};
+  
+  for (let i = 0; i < data.length - 1 && i < coordinates.length - 1; i++) {
+    const value = data[i];
+    
+    // Skip null/undefined values
+    if (value === null || value === undefined) {
+      continue;
+    }
+    
+    // Calculate distance between this point and the next
+    const segmentDistance = calculateDistance(coordinates[i], coordinates[i + 1]);
+    
+    // Normalize value for key (treat boolean-like values consistently)
+    let key;
+    if (encodedType === 'custom_present') {
+      const isTrue = value === true || value === 'True' || value === 'true';
+      key = isTrue ? 'true' : 'false';
+    } else {
+      key = String(value);
+    }
+    
+    if (!valueDistances[key]) {
+      valueDistances[key] = 0;
+    }
+    valueDistances[key] += segmentDistance;
+  }
+  
+  // Build HTML
+  if (Object.keys(valueDistances).length === 0) {
+    statsContainer.innerHTML = '';
+    statsContainer.style.display = 'none';
+    return;
+  }
+  
+  let statsHTML = '';
+  // Sort by distance (highest first)
+  const sortedKeys = Object.keys(valueDistances).sort((a, b) => {
+    return valueDistances[b] - valueDistances[a];
+  });
+  
+  sortedKeys.forEach(key => {
+    const distanceKm = (valueDistances[key] / 1000).toFixed(2);
+    let displayKey = key;
+    let backgroundColor = '';
+    
+    if (encodedType === 'custom_present') {
+      displayKey = key === 'true' ? 'true' : 'false';
+      // Use same colors as route visualization: blue for true, pink for false
+      backgroundColor = key === 'true' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(236, 72, 153, 0.15)';
+    } else if (encodedType === 'surface') {
+      // Get surface color and make it lighter for background
+      const surfaceColor = getSurfaceColorForStats(key);
+      backgroundColor = surfaceColor;
+    }
+    
+    statsHTML += `<div class="heightgraph-stat-item" style="background-color: ${backgroundColor};">
+      <span class="heightgraph-stat-label">${displayKey}</span>
+      <span class="heightgraph-stat-value">${distanceKm} km</span>
+    </div>`;
+  });
+  
+  statsContainer.innerHTML = statsHTML;
+  statsContainer.style.display = 'flex';
+}
+
+// Helper function to get color for surface value (for heightgraph fill)
 function getSurfaceColor(surfaceValue) {
   if (!surfaceValue) return 'rgba(156, 163, 175, 0.3)'; // Gray for null/undefined
   
@@ -410,11 +517,39 @@ function getSurfaceColor(surfaceValue) {
     'wood': 'rgba(180, 83, 9, 0.3)',          // Dark orange
     'metal': 'rgba(71, 85, 105, 0.3)',        // Slate
     'sett': 'rgba(99, 102, 241, 0.3)',        // Indigo
-    'paving_stones': 'rgba(99, 102, 241, 0.3)' // Indigo
+    'paving_stones': 'rgba(14, 165, 233, 0.3)' // Sky blue
   };
   
   const normalizedValue = String(surfaceValue).toLowerCase();
   return surfaceColors[normalizedValue] || 'rgba(156, 163, 175, 0.3)'; // Default gray
+}
+
+// Helper function to get background color for surface value in stats (lighter version)
+function getSurfaceColorForStats(surfaceValue) {
+  if (!surfaceValue) return 'rgba(156, 163, 175, 0.15)'; // Gray for null/undefined
+  
+  const surfaceColors = {
+    'asphalt': 'rgba(34, 197, 94, 0.15)',      // Green
+    'concrete': 'rgba(249, 115, 22, 0.15)',     // Orange
+    'paved': 'rgba(59, 130, 246, 0.15)',       // Blue
+    'unpaved': 'rgba(168, 85, 247, 0.15)',     // Purple
+    'gravel': 'rgba(236, 72, 153, 0.15)',      // Pink
+    'dirt': 'rgba(120, 53, 15, 0.15)',         // Brown
+    'sand': 'rgba(234, 179, 8, 0.15)',         // Yellow
+    'grass': 'rgba(22, 163, 74, 0.15)',        // Dark green
+    'ground': 'rgba(120, 53, 15, 0.15)',       // Brown
+    'compacted': 'rgba(107, 114, 128, 0.15)',  // Gray
+    'fine_gravel': 'rgba(251, 146, 60, 0.15)', // Light orange
+    'pebblestone': 'rgba(168, 85, 247, 0.15)',  // Purple
+    'cobblestone': 'rgba(99, 102, 241, 0.15)', // Indigo
+    'wood': 'rgba(180, 83, 9, 0.15)',          // Dark orange
+    'metal': 'rgba(71, 85, 105, 0.15)',        // Slate
+    'sett': 'rgba(99, 102, 241, 0.15)',        // Indigo
+    'paving_stones': 'rgba(14, 165, 233, 0.15)' // Sky blue
+  };
+  
+  const normalizedValue = String(surfaceValue).toLowerCase();
+  return surfaceColors[normalizedValue] || 'rgba(156, 163, 175, 0.15)'; // Default gray
 }
 
 function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordinates) {

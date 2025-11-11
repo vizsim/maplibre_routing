@@ -609,12 +609,16 @@ code {
   right: 10px;
   width: 320px;
   max-width: calc(100% - 20px);
+  max-height: calc(70vh - 10px);
   background: white;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  z-index: 1;
+  z-index: 2;
   font-family: sans-serif;
   transition: width 0.3s ease, height 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .routing-panel.collapsed {
@@ -713,6 +717,29 @@ code {
 .routing-content {
   padding: 16px;
   display: block;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.routing-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.routing-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.routing-content::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.routing-content::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }
 
 .routing-input-group {
@@ -927,6 +954,35 @@ code {
 .heightgraph-container div[style*="position: relative"] {
   position: relative;
   width: 100%;
+}
+
+.heightgraph-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 16px;
+  background: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+  font-size: 13px;
+}
+
+.heightgraph-stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 4px;
+  margin: 2px 0;
+}
+
+.heightgraph-stat-label {
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.heightgraph-stat-value {
+  color: #111827;
+  font-weight: 600;
 }
 
 #heightgraph-indicator-canvas {

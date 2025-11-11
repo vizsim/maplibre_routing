@@ -699,22 +699,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const padding = 10;
       const maxBottom = viewportHeight - padding;
       
-      // Calculate available space
-      const availableSpace = maxBottom - routingBottom - padding;
+      // Calculate available space - ensure context panel gets remaining 30% of viewport
+      const routingMaxHeight = viewportHeight * 0.7;
+      const contextMaxHeight = viewportHeight * 0.3 - padding;
+      const routingActualHeight = Math.min(routingRect.height, routingMaxHeight);
+      const routingBottomCalculated = routingRect.top + routingActualHeight;
       
-      if (availableSpace > 100) {
-        // Enough space - position below routing panel
-        contextPanel.style.top = `${routingBottom + padding}px`;
-        contextPanel.style.maxHeight = `${availableSpace}px`;
-        contextPanel.style.overflowY = 'auto';
-        contextPanel.style.bottom = 'auto';
-      } else {
-        // Not enough space - position at bottom of viewport
-        contextPanel.style.top = 'auto';
-        contextPanel.style.bottom = `${padding}px`;
-        contextPanel.style.maxHeight = `${Math.min(300, viewportHeight - padding * 2)}px`;
-        contextPanel.style.overflowY = 'auto';
-      }
+      // Position context panel below routing panel
+      contextPanel.style.top = `${routingBottomCalculated + padding}px`;
+      contextPanel.style.maxHeight = `${contextMaxHeight}px`;
+      contextPanel.style.overflowY = 'auto';
+      contextPanel.style.bottom = 'auto';
     };
     
     // Update on load
@@ -723,15 +718,27 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update on window resize
     window.addEventListener('resize', updateContextPanelPosition);
     
-    // Update when routing panel content changes
-    const observer = new MutationObserver(updateContextPanelPosition);
-    observer.observe(routingPanel, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
-    observer.observe(contextPanel, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+    // Update when routing panel content changes (e.g., route calculated, heightgraph shown)
+    const observer = new MutationObserver(() => {
+      updateContextPanelPosition();
+    });
+    
+    observer.observe(routingPanel, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style']
+    });
     
     // Also update when route info changes (heightgraph appears/disappears)
     const routeInfo = document.getElementById('route-info');
     if (routeInfo) {
       observer.observe(routeInfo, { childList: true, subtree: true, attributes: true });
+    }
+    
+    const heightgraphContainer = document.getElementById('heightgraph-container');
+    if (heightgraphContainer) {
+      observer.observe(heightgraphContainer, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
     }
   }
 });

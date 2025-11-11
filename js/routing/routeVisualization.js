@@ -137,7 +137,7 @@ function getColorForEncodedValue(encodedType, value, allValues = []) {
       'wood': '#b45309',          // Dark orange
       'metal': '#475569',         // Slate
       'sett': '#6366f1',          // Indigo
-      'paving_stones': '#6366f1'  // Indigo
+      'paving_stones': '#0ea5e9'  // Sky blue
     };
     const normalizedValue = String(value).toLowerCase();
     return surfaceColors[normalizedValue] || '#9ca3af'; // Default gray
