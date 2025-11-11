@@ -264,6 +264,31 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
     }
   }
   
+  // Calculate cumulative distances for each point (for accurate X-axis positioning)
+  // This ensures the graph matches the actual route distance, not just point count
+  const cumulativeDistances = [];
+  let actualTotalDistance = totalDistance; // Will be updated with actual calculated distance
+  
+  if (coordinates.length > 0) {
+    let cumulativeDist = 0;
+    cumulativeDistances.push(0); // Start at 0
+    
+    for (let i = 1; i < coordinates.length; i++) {
+      const segmentDist = calculateDistance(coordinates[i - 1], coordinates[i]);
+      cumulativeDist += segmentDist;
+      cumulativeDistances.push(cumulativeDist);
+    }
+    
+    // Use the actual calculated cumulative distance as the total
+    // This ensures the graph goes from 0% to 100% correctly
+    actualTotalDistance = cumulativeDist;
+  } else {
+    // Fallback: use index-based if no coordinates
+    for (let i = 0; i < baseData.length; i++) {
+      cumulativeDistances.push((i / (baseData.length - 1)) * totalDistance);
+    }
+  }
+  
   // Always draw base elevation profile first
   if (baseData.length > 0) {
     const baseValid = baseData.filter(v => v !== null && v !== undefined);
@@ -276,14 +301,19 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
       ctx.lineWidth = 2;
       ctx.beginPath();
       
-      const stepX = graphWidth / (baseData.length - 1);
-      
       // Store points for area filling
       const points = [];
       
       baseData.forEach((value, index) => {
         if (value === null || value === undefined) return;
-        const x = padding.left + stepX * index;
+        
+        // Calculate X position based on cumulative distance, not index
+        // Use actualTotalDistance to ensure 100% matches the end of the route
+        const distanceRatio = actualTotalDistance > 0 && cumulativeDistances[index] !== undefined
+          ? cumulativeDistances[index] / actualTotalDistance
+          : index / (baseData.length - 1);
+        const x = padding.left + graphWidth * distanceRatio;
+        
         const normalized = (value - baseMin) / baseRange;
         const y = padding.top + graphHeight - (normalized * graphHeight);
         
@@ -466,12 +496,13 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
     }
   }
   
-  // Draw distance labels on x-axis with dynamic step size based on total distance
+  // Draw distance labels on x-axis with dynamic step size based on actual total distance
   ctx.fillStyle = '#6b7280';
   ctx.font = '10px sans-serif';
   ctx.textAlign = 'center';
   
-  const totalDistanceKm = totalDistance / 1000;
+  // Use actualTotalDistance instead of totalDistance for accurate X-axis labels
+  const totalDistanceKm = actualTotalDistance / 1000;
   const maxTicks = 8; // Maximum number of ticks to avoid overcrowding
   
   // Determine appropriate step size based on total distance
@@ -531,7 +562,7 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
       indicatorCanvas.style.width = canvas.width + 'px';
       indicatorCanvas.style.height = canvas.height + 'px';
     }
-    setupHeightgraphInteractivity(canvas, baseData, totalDistance, coordinates);
+    setupHeightgraphInteractivity(canvas, baseData, actualTotalDistance, coordinates, cumulativeDistances);
   }
   
   // Update stats
@@ -663,7 +694,7 @@ function getRoadClassColor(roadClassValue) {
   return getRoadClassColorRgba(roadClassValue, 0.3);
 }
 
-function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordinates) {
+function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordinates, cumulativeDistances = null) {
   if (!canvas || !routeState.currentRouteData || !routeState.mapInstance || !coordinates || coordinates.length === 0) return;
   
   const { encodedValues } = routeState.currentRouteData;
@@ -671,8 +702,36 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
   const selectedType = select ? select.value : 'custom_present';
   // Use same padding values as in drawHeightgraph
   const padding = { top: 20, right: 5, bottom: 30, left: 25 };
-  const graphWidth = canvas.width - padding.left - padding.right;
-  const graphHeight = canvas.height - padding.top - padding.bottom;
+  
+  // CRITICAL: Use getBoundingClientRect() to get the ACTUAL rendered size, not canvas.width
+  // canvas.width is the internal resolution, but CSS might scale it down
+  // This was the bug when the chart was made wider!
+  const rect = canvas.getBoundingClientRect();
+  const actualCanvasWidth = rect.width;
+  const actualCanvasHeight = rect.height;
+  
+  const graphWidth = actualCanvasWidth - padding.left - padding.right;
+  const graphHeight = actualCanvasHeight - padding.top - padding.bottom;
+  
+  // Calculate cumulative distances if not provided
+  let computedCumulativeDistances = cumulativeDistances;
+  let actualTotalDistance = totalDistance;
+  
+  if (!computedCumulativeDistances && coordinates.length > 0) {
+    computedCumulativeDistances = [];
+    let cumulativeDist = 0;
+    computedCumulativeDistances.push(0);
+    for (let i = 1; i < coordinates.length; i++) {
+      const segmentDist = calculateDistance(coordinates[i - 1], coordinates[i]);
+      cumulativeDist += segmentDist;
+      computedCumulativeDistances.push(cumulativeDist);
+    }
+    // Update actualTotalDistance to match calculated distance
+    actualTotalDistance = cumulativeDist;
+  } else if (computedCumulativeDistances && computedCumulativeDistances.length > 0) {
+    // Use the last cumulative distance as the actual total
+    actualTotalDistance = computedCumulativeDistances[computedCumulativeDistances.length - 1];
+  }
   
   // Remove existing event listeners if they exist
   if (heightgraphMouseMoveHandler) {
@@ -710,20 +769,26 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
   
   // Create new event handlers
   heightgraphMouseMoveHandler = (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // Get fresh bounding rect to handle any resizing or CSS scaling
+    // This is critical: canvas.width might be different from rendered size!
+    const currentRect = canvas.getBoundingClientRect();
+    const x = e.clientX - currentRect.left;
+    const y = e.clientY - currentRect.top;
     
-    // Calculate graph boundaries - use actual canvas width minus padding
-    const rightBoundary = padding.left + graphWidth;
-    const bottomBoundary = padding.top + graphHeight;
+    // Recalculate graphWidth from actual rendered size (not canvas.width!)
+    // This fixes the bug when chart width was changed
+    const actualGraphWidth = currentRect.width - padding.left - padding.right;
+    const actualGraphHeight = currentRect.height - padding.top - padding.bottom;
     
-    // Check if mouse is within graph area (include edges with tolerance)
-    // Allow tolerance on the right edge to ensure full coverage (account for rounding/pixel issues)
-    // Use a percentage-based tolerance to handle different canvas sizes
-    const tolerance = Math.max(5, graphWidth * 0.1); // At least 5px or 10% of graph width
-    if (x < padding.left || x > rightBoundary + tolerance || 
-        y < padding.top || y > bottomBoundary) {
+    // Calculate graph boundaries - use actual rendered canvas width minus padding
+    const leftBoundary = padding.left;
+    const rightBoundary = padding.left + actualGraphWidth;
+    const topBoundary = padding.top;
+    const bottomBoundary = padding.top + actualGraphHeight;
+    
+    // Check if mouse is within graph area (strict boundaries, no tolerance)
+    if (x < leftBoundary || x > rightBoundary || 
+        y < topBoundary || y > bottomBoundary) {
       tooltip.style.display = 'none';
       if (routeHighlightMarker) {
         routeHighlightMarker.remove();
@@ -736,23 +801,52 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
           features: []
         });
       }
+      // Clear indicator line
+      const indicatorCanvas = document.getElementById('heightgraph-indicator-canvas');
+      if (indicatorCanvas) {
+        const indicatorCtx = indicatorCanvas.getContext('2d');
+        indicatorCtx.clearRect(0, 0, indicatorCanvas.width, indicatorCanvas.height);
+      }
       return;
     }
     
     // Calculate which point in the data corresponds to this x position
-    // Clamp relativeX to ensure it's within bounds (even with tolerance)
-    let relativeX = x - padding.left;
-    // If x is beyond rightBoundary but within tolerance, clamp to graphWidth
-    if (relativeX > graphWidth) {
-      relativeX = graphWidth;
+    // Use distance-based calculation to match the X-axis labels
+    // Calculate relative position within the graph area (0 to 1)
+    // Use actualGraphWidth (from rendered size), not graphWidth (from canvas.width)!
+    const relativeX = (x - padding.left) / actualGraphWidth;
+    // Clamp to valid range [0, 1]
+    const clampedRelativeX = Math.max(0, Math.min(1, relativeX));
+    
+    // Calculate distance ratio from X position
+    // Use actualTotalDistance to ensure hover matches the graph
+    // clampedRelativeX is already a ratio [0, 1], so use it directly
+    const targetDistance = clampedRelativeX * actualTotalDistance;
+    
+    // Find the closest point based on cumulative distance
+    let dataIndex = 0;
+    let minDistanceDiff = Infinity;
+    
+    if (computedCumulativeDistances && computedCumulativeDistances.length > 0) {
+      // Find closest point using cumulative distances
+      for (let i = 0; i < computedCumulativeDistances.length; i++) {
+        const distDiff = Math.abs(computedCumulativeDistances[i] - targetDistance);
+        if (distDiff < minDistanceDiff) {
+          minDistanceDiff = distDiff;
+          dataIndex = i;
+        }
+      }
+    } else {
+      // Fallback: use index-based calculation
+      dataIndex = Math.min(elevations.length - 1, Math.max(0, Math.round(clampedRelativeX * (elevations.length - 1))));
     }
-    relativeX = Math.max(0, Math.min(graphWidth, relativeX));
-    const dataIndex = Math.min(elevations.length - 1, Math.max(0, Math.round((relativeX / graphWidth) * (elevations.length - 1))));
     
     if (dataIndex >= 0 && dataIndex < elevations.length && dataIndex < coordinates.length) {
       const elevation = elevations[dataIndex];
       const coord = coordinates[dataIndex];
-      const distance = (totalDistance / elevations.length) * dataIndex;
+      const distance = computedCumulativeDistances && computedCumulativeDistances[dataIndex] !== undefined 
+        ? computedCumulativeDistances[dataIndex] 
+        : (totalDistance / elevations.length) * dataIndex;
       
       // Show tooltip
       tooltip.style.display = 'block';
@@ -838,7 +932,8 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
         }
         
         // Draw vertical indicator line on heightgraph using separate overlay canvas
-        // Always draw at exact mouse position x (no clamping)
+        // Draw at the calculated position based on distance, not exact mouse position
+        // This ensures the indicator matches the actual route position
         const indicatorCanvas = document.getElementById('heightgraph-indicator-canvas');
         if (indicatorCanvas) {
           const indicatorCtx = indicatorCanvas.getContext('2d');
@@ -846,21 +941,27 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
           // Clear previous indicator line
           indicatorCtx.clearRect(0, 0, indicatorCanvas.width, indicatorCanvas.height);
           
-          // Draw new indicator line at exact mouse position
+          // Calculate the X position based on the actual distance ratio
+          // This ensures the indicator line matches the route position, not just mouse position
+          // Use actualGraphWidth to match the rendered canvas size
+          const indicatorX = padding.left + (clampedRelativeX * actualGraphWidth);
+          
+          // Draw new indicator line at calculated position
           indicatorCtx.strokeStyle = '#ef4444';
           indicatorCtx.lineWidth = 2;
           indicatorCtx.beginPath();
-          indicatorCtx.moveTo(x, padding.top);
-          indicatorCtx.lineTo(x, padding.top + graphHeight);
+          indicatorCtx.moveTo(indicatorX, padding.top);
+          indicatorCtx.lineTo(indicatorX, padding.top + actualGraphHeight);
           indicatorCtx.stroke();
         } else {
           // Fallback: draw on main canvas if indicator canvas not available
           const ctx = canvas.getContext('2d');
+          const indicatorX = padding.left + (clampedRelativeX * actualGraphWidth);
           ctx.strokeStyle = '#ef4444';
           ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.moveTo(x, padding.top);
-          ctx.lineTo(x, padding.top + graphHeight);
+          ctx.moveTo(indicatorX, padding.top);
+          ctx.lineTo(indicatorX, padding.top + actualGraphHeight);
           ctx.stroke();
         }
       }
