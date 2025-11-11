@@ -327,6 +327,55 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
           ctx.closePath();
           ctx.fill();
         }
+      } else if (selectedType === 'road_class' && encodedValues.road_class && encodedValues.road_class.length > 0 && points.length > 0) {
+        // Fill segment by segment based on road_class
+        // Group consecutive segments with the same road_class value
+        let currentRoadClass = null;
+        let segmentStart = 0;
+        
+        for (let i = 0; i < points.length; i++) {
+          const roadClassValue = encodedValues.road_class[points[i].index];
+          
+          if (roadClassValue !== currentRoadClass) {
+            // Fill previous segment if exists
+            if (currentRoadClass !== null && i > segmentStart) {
+              const fillColor = getRoadClassColor(currentRoadClass);
+              ctx.fillStyle = fillColor;
+              ctx.beginPath();
+              ctx.moveTo(points[segmentStart].x, points[segmentStart].y);
+              for (let j = segmentStart + 1; j < i; j++) {
+                ctx.lineTo(points[j].x, points[j].y);
+              }
+              // Include the transition point to avoid gaps
+              if (i < points.length) {
+                ctx.lineTo(points[i].x, points[i].y);
+              }
+              ctx.lineTo(points[i < points.length ? i : i - 1].x, padding.top + graphHeight);
+              ctx.lineTo(points[segmentStart].x, padding.top + graphHeight);
+              ctx.closePath();
+              ctx.fill();
+            }
+            
+            // Start new segment
+            currentRoadClass = roadClassValue;
+            segmentStart = i;
+          }
+        }
+        
+        // Fill final segment
+        if (currentRoadClass !== null && segmentStart < points.length) {
+          const fillColor = getRoadClassColor(currentRoadClass);
+          ctx.fillStyle = fillColor;
+          ctx.beginPath();
+          ctx.moveTo(points[segmentStart].x, points[segmentStart].y);
+          for (let j = segmentStart + 1; j < points.length; j++) {
+            ctx.lineTo(points[j].x, points[j].y);
+          }
+          ctx.lineTo(points[points.length - 1].x, padding.top + graphHeight);
+          ctx.lineTo(points[segmentStart].x, padding.top + graphHeight);
+          ctx.closePath();
+          ctx.fill();
+        }
       } else {
         // Fallback: fill with default blue if no encoded value data
         ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
@@ -484,6 +533,10 @@ export function updateHeightgraphStats(encodedType, encodedValues) {
       // Get surface color and make it lighter for background
       const surfaceColor = getSurfaceColorForStats(key);
       backgroundColor = surfaceColor;
+    } else if (encodedType === 'road_class') {
+      // Get road_class color and make it lighter for background
+      const roadClassColor = getRoadClassColorForStats(key);
+      backgroundColor = roadClassColor;
     }
     
     statsHTML += `<div class="heightgraph-stat-item" style="background-color: ${backgroundColor};">
@@ -550,6 +603,56 @@ function getSurfaceColorForStats(surfaceValue) {
   
   const normalizedValue = String(surfaceValue).toLowerCase();
   return surfaceColors[normalizedValue] || 'rgba(156, 163, 175, 0.15)'; // Default gray
+}
+
+// Helper function to get color for road_class value (for heightgraph fill)
+function getRoadClassColor(roadClassValue) {
+  if (!roadClassValue) return 'rgba(156, 163, 175, 0.3)'; // Gray for null/undefined
+  
+  const roadClassColors = {
+    'motorway': 'rgba(220, 38, 38, 0.3)',      // Red
+    'trunk': 'rgba(239, 68, 68, 0.3)',         // Light red
+    'primary': 'rgba(249, 115, 22, 0.3)',      // Orange
+    'secondary': 'rgba(234, 179, 8, 0.3)',     // Yellow
+    'tertiary': 'rgba(34, 197, 94, 0.3)',      // Green
+    'unclassified': 'rgba(59, 130, 246, 0.3)', // Blue
+    'residential': 'rgba(168, 85, 247, 0.3)',   // Purple
+    'service': 'rgba(236, 72, 153, 0.3)',      // Pink
+    'track': 'rgba(120, 53, 15, 0.3)',         // Brown
+    'path': 'rgba(107, 114, 128, 0.3)',        // Gray
+    'cycleway': 'rgba(14, 165, 233, 0.3)',    // Sky blue
+    'footway': 'rgba(22, 163, 74, 0.3)',       // Dark green
+    'steps': 'rgba(180, 83, 9, 0.3)',          // Dark orange
+    'living_street': 'rgba(251, 146, 60, 0.3)' // Light orange
+  };
+  
+  const normalizedValue = String(roadClassValue).toLowerCase();
+  return roadClassColors[normalizedValue] || 'rgba(156, 163, 175, 0.3)'; // Default gray
+}
+
+// Helper function to get background color for road_class value in stats (lighter version)
+function getRoadClassColorForStats(roadClassValue) {
+  if (!roadClassValue) return 'rgba(156, 163, 175, 0.15)'; // Gray for null/undefined
+  
+  const roadClassColors = {
+    'motorway': 'rgba(220, 38, 38, 0.15)',      // Red
+    'trunk': 'rgba(239, 68, 68, 0.15)',         // Light red
+    'primary': 'rgba(249, 115, 22, 0.15)',      // Orange
+    'secondary': 'rgba(234, 179, 8, 0.15)',     // Yellow
+    'tertiary': 'rgba(34, 197, 94, 0.15)',      // Green
+    'unclassified': 'rgba(59, 130, 246, 0.15)', // Blue
+    'residential': 'rgba(168, 85, 247, 0.15)',   // Purple
+    'service': 'rgba(236, 72, 153, 0.15)',      // Pink
+    'track': 'rgba(120, 53, 15, 0.15)',         // Brown
+    'path': 'rgba(107, 114, 128, 0.15)',        // Gray
+    'cycleway': 'rgba(14, 165, 233, 0.15)',    // Sky blue
+    'footway': 'rgba(22, 163, 74, 0.15)',       // Dark green
+    'steps': 'rgba(180, 83, 9, 0.15)',          // Dark orange
+    'living_street': 'rgba(251, 146, 60, 0.15)' // Light orange
+  };
+  
+  const normalizedValue = String(roadClassValue).toLowerCase();
+  return roadClassColors[normalizedValue] || 'rgba(156, 163, 175, 0.15)'; // Default gray
 }
 
 function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordinates) {
@@ -672,7 +775,7 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
         tooltipContent += `Höhe: ${Math.round(elevation)} m<br>`;
       }
       
-      // Add selected encoded value (custom_present or surface)
+      // Add selected encoded value (custom_present, surface, or road_class)
       if (selectedType === 'custom_present' && encodedValues.custom_present && encodedValues.custom_present[dataIndex] !== undefined && 
           encodedValues.custom_present[dataIndex] !== null) {
         const customValue = encodedValues.custom_present[dataIndex];
@@ -684,6 +787,10 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
                  encodedValues.surface[dataIndex] !== null) {
         const surfaceValue = encodedValues.surface[dataIndex];
         tooltipContent += `Surface: ${String(surfaceValue)}`;
+      } else if (selectedType === 'road_class' && encodedValues.road_class && encodedValues.road_class[dataIndex] !== undefined && 
+                 encodedValues.road_class[dataIndex] !== null) {
+        const roadClassValue = encodedValues.road_class[dataIndex];
+        tooltipContent += `Road Class: ${String(roadClassValue)}`;
       }
       
       tooltip.innerHTML = tooltipContent;

@@ -77,6 +77,11 @@ export function setupRouteHover(map) {
                  encodedValues.surface[closestIndex] !== null) {
         selectedValue = encodedValues.surface[closestIndex];
         valueLabel = 'Surface';
+      } else if (selectedType === 'road_class' && encodedValues.road_class && 
+                 encodedValues.road_class[closestIndex] !== undefined && 
+                 encodedValues.road_class[closestIndex] !== null) {
+        selectedValue = encodedValues.road_class[closestIndex];
+        valueLabel = 'Road Class';
       }
       
       // Show popup only if we have a value for the selected type
@@ -141,6 +146,27 @@ function getColorForEncodedValue(encodedType, value, allValues = []) {
     };
     const normalizedValue = String(value).toLowerCase();
     return surfaceColors[normalizedValue] || '#9ca3af'; // Default gray
+  }
+  
+  if (encodedType === 'road_class') {
+    const roadClassColors = {
+      'motorway': '#dc2626',      // Red
+      'trunk': '#ef4444',         // Light red
+      'primary': '#f97316',       // Orange
+      'secondary': '#eab308',      // Yellow
+      'tertiary': '#22c55e',      // Green
+      'unclassified': '#3b82f6',  // Blue
+      'residential': '#a855f7',   // Purple
+      'service': '#ec4899',        // Pink
+      'track': '#78350f',         // Brown
+      'path': '#6b7280',          // Gray
+      'cycleway': '#0ea5e9',      // Sky blue
+      'footway': '#16a34a',       // Dark green
+      'steps': '#b45309',         // Dark orange
+      'living_street': '#fb923c'  // Light orange
+    };
+    const normalizedValue = String(value).toLowerCase();
+    return roadClassColors[normalizedValue] || '#9ca3af'; // Default gray
   }
   
   if (encodedType === 'elevation' || encodedType === 'time' || encodedType === 'distance') {
