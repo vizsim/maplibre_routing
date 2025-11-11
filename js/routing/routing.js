@@ -22,17 +22,6 @@ export function setupRouting(map) {
     });
   }
 
-  // Create source for custom_present segments (black border)
-  if (!map.getSource('route-custom-present')) {
-    map.addSource('route-custom-present', {
-      type: 'geojson',
-      data: {
-        type: 'FeatureCollection',
-        features: []
-      }
-    });
-  }
-  
   // Create source for hover buffer (highlight segment on hover)
   if (!map.getSource('route-hover-buffer')) {
     map.addSource('route-hover-buffer', {
@@ -51,24 +40,6 @@ export function setupRouting(map) {
       data: {
         type: 'FeatureCollection',
         features: []
-      }
-    });
-  }
-  
-  // Create layer for custom_present segments (black border, wider)
-  if (!map.getLayer('route-custom-present-layer')) {
-    map.addLayer({
-      id: 'route-custom-present-layer',
-      type: 'line',
-      source: 'route-custom-present',
-      layout: {
-        'line-join': 'round',
-        'line-cap': 'round'
-      },
-      paint: {
-        'line-color': '#000000',
-        'line-width': 8,
-        'line-opacity': 1.0
       }
     });
   }
@@ -371,76 +342,26 @@ export async function calculateRoute(map, start, end) {
       });
       console.log('===================================');
       
-      // Update route layer
+      // Update route layer - will be colored by updateRouteColor based on selected encoded value
+      // Initially set as single feature, will be updated by updateRouteColor
       map.getSource('route').setData({
         type: 'Feature',
         geometry: {
           type: 'LineString',
           coordinates: coordinates
         },
-        properties: {}
+        properties: {
+          color: '#3b82f6'
+        }
       });
       
-      // Create segments for custom_present=True (black border)
-      if (encodedValues.custom_present && encodedValues.custom_present.length > 0) {
-        const customPresentSegments = [];
-        let currentSegment = null;
-        
-        coordinates.forEach((coord, index) => {
-          const isCustomPresent = encodedValues.custom_present[index] === true || 
-                                  encodedValues.custom_present[index] === 'True' ||
-                                  encodedValues.custom_present[index] === 'true';
-          
-          if (isCustomPresent) {
-            if (currentSegment === null) {
-              // Start new segment
-              currentSegment = [coord];
-            } else {
-              // Continue segment
-              currentSegment.push(coord);
-            }
-          } else {
-            // End current segment if exists
-            if (currentSegment !== null && currentSegment.length > 1) {
-              customPresentSegments.push({
-                type: 'Feature',
-                geometry: {
-                  type: 'LineString',
-                  coordinates: currentSegment
-                },
-                properties: {}
-              });
-              currentSegment = null;
-            }
-          }
-        });
-        
-        // Add final segment if exists
-        if (currentSegment !== null && currentSegment.length > 1) {
-          customPresentSegments.push({
-            type: 'Feature',
-            geometry: {
-              type: 'LineString',
-              coordinates: currentSegment
-            },
-            properties: {}
-          });
-        }
-        
-        // Update custom_present layer
-        map.getSource('route-custom-present').setData({
-          type: 'FeatureCollection',
-          features: customPresentSegments
-        });
-        
-        console.log('Custom present segments:', customPresentSegments.length);
-      } else {
-        // Clear custom_present layer if no data
-        map.getSource('route-custom-present').setData({
-          type: 'FeatureCollection',
-          features: []
-        });
-      }
+      // Update layer to support property-based coloring
+      map.setPaintProperty('route-layer', 'line-color', ['get', 'color']);
+      
+      // Update route color based on selected encoded value
+      const select = document.getElementById('heightgraph-encoded-select');
+      const selectedType = select ? select.value : 'custom_present';
+      updateRouteColor(selectedType, encodedValues);
       
       // Update route info
       if (routeInfo) {
@@ -592,12 +513,6 @@ export function clearRoute(map) {
   });
   
   // Clear custom_present layer
-  if (map.getSource('route-custom-present')) {
-    map.getSource('route-custom-present').setData({
-      type: 'FeatureCollection',
-      features: []
-    });
-  }
   
   // Clear hover buffer layer
   if (map.getSource('route-hover-buffer')) {

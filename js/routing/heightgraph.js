@@ -222,25 +222,57 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
       
       if (selectedType === 'custom_present' && encodedValues.custom_present && encodedValues.custom_present.length > 0 && points.length > 0) {
         // Fill segment by segment based on custom_present
-        for (let i = 0; i < points.length - 1; i++) {
-          const point1 = points[i];
-          const point2 = points[i + 1];
-          
-          // Get custom_present value for this segment
-          const customValue = encodedValues.custom_present[point1.index];
+        // Group consecutive segments with the same value to avoid gaps
+        let currentValue = null;
+        let segmentStart = 0;
+        
+        for (let i = 0; i < points.length; i++) {
+          const customValue = encodedValues.custom_present[points[i].index];
           const isCustomPresent = customValue === true || customValue === 'True' || customValue === 'true';
           
-          // Set color based on custom_present
-          const fillColor = isCustomPresent 
+          if (isCustomPresent !== currentValue) {
+            // Fill previous segment if exists
+            if (currentValue !== null && i > segmentStart) {
+              const fillColor = currentValue 
+                ? 'rgba(59, 130, 246, 0.3)'  // Blue for true
+                : 'rgba(236, 72, 153, 0.3)'; // Pink/rosa for false
+              
+              ctx.fillStyle = fillColor;
+              ctx.beginPath();
+              ctx.moveTo(points[segmentStart].x, points[segmentStart].y);
+              for (let j = segmentStart + 1; j < i; j++) {
+                ctx.lineTo(points[j].x, points[j].y);
+              }
+              // Include the transition point to avoid gaps
+              if (i < points.length) {
+                ctx.lineTo(points[i].x, points[i].y);
+              }
+              ctx.lineTo(points[i < points.length ? i : i - 1].x, padding.top + graphHeight);
+              ctx.lineTo(points[segmentStart].x, padding.top + graphHeight);
+              ctx.closePath();
+              ctx.fill();
+            }
+            
+            // Start new segment
+            currentValue = isCustomPresent;
+            segmentStart = i;
+          }
+        }
+        
+        // Fill final segment
+        if (currentValue !== null && segmentStart < points.length) {
+          const fillColor = currentValue 
             ? 'rgba(59, 130, 246, 0.3)'  // Blue for true
             : 'rgba(236, 72, 153, 0.3)'; // Pink/rosa for false
           
           ctx.fillStyle = fillColor;
           ctx.beginPath();
-          ctx.moveTo(point1.x, point1.y);
-          ctx.lineTo(point2.x, point2.y);
-          ctx.lineTo(point2.x, padding.top + graphHeight);
-          ctx.lineTo(point1.x, padding.top + graphHeight);
+          ctx.moveTo(points[segmentStart].x, points[segmentStart].y);
+          for (let j = segmentStart + 1; j < points.length; j++) {
+            ctx.lineTo(points[j].x, points[j].y);
+          }
+          ctx.lineTo(points[points.length - 1].x, padding.top + graphHeight);
+          ctx.lineTo(points[segmentStart].x, padding.top + graphHeight);
           ctx.closePath();
           ctx.fill();
         }
@@ -263,7 +295,11 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
               for (let j = segmentStart + 1; j < i; j++) {
                 ctx.lineTo(points[j].x, points[j].y);
               }
-              ctx.lineTo(points[i - 1].x, padding.top + graphHeight);
+              // Include the transition point to avoid gaps
+              if (i < points.length) {
+                ctx.lineTo(points[i].x, points[i].y);
+              }
+              ctx.lineTo(points[i < points.length ? i : i - 1].x, padding.top + graphHeight);
               ctx.lineTo(points[segmentStart].x, padding.top + graphHeight);
               ctx.closePath();
               ctx.fill();

@@ -30,16 +30,21 @@ export function setupRouteHover(map) {
   
   map.on('mousemove', 'route-layer', (e) => {
     if (routeState.currentRouteData && e.features && e.features.length > 0) {
-      const feature = e.features[0];
-      const coordinates = feature.geometry.coordinates;
+      // Use original coordinates from routeState, not segment coordinates
+      const { coordinates: originalCoordinates } = routeState.currentRouteData;
       const point = e.lngLat;
       
-      // Find closest point on route
-      let closestPoint = coordinates[0];
+      if (!originalCoordinates || originalCoordinates.length === 0) {
+        popup.remove();
+        return;
+      }
+      
+      // Find closest point on original route (not just the segment)
+      let closestPoint = originalCoordinates[0];
       let closestIndex = 0;
       let minDist = Infinity;
       
-      coordinates.forEach((coord, idx) => {
+      originalCoordinates.forEach((coord, idx) => {
         const dist = Math.sqrt(
           Math.pow(coord[0] - point.lng, 2) + 
           Math.pow(coord[1] - point.lat, 2)
@@ -52,239 +57,218 @@ export function setupRouteHover(map) {
       });
       
       // Get all available details for this point
-      const { encodedValues, elevations } = routeState.currentRouteData;
+      const { encodedValues } = routeState.currentRouteData;
       
-      // Find the segment that contains this point - only highlight if custom_present=True
-      // Check if custom_present is available and if the current point has custom_present=True
-      if (encodedValues.custom_present && 
+      // Get selected encoded type from heightgraph dropdown
+      const select = document.getElementById('heightgraph-encoded-select');
+      const selectedType = select ? select.value : 'custom_present';
+      
+      // Get the value for the selected encoded type at this point
+      let selectedValue = null;
+      let valueLabel = '';
+      
+      if (selectedType === 'custom_present' && encodedValues.custom_present && 
           encodedValues.custom_present[closestIndex] !== undefined && 
           encodedValues.custom_present[closestIndex] !== null) {
-        
-        const isCustomPresent = encodedValues.custom_present[closestIndex] === true || 
-                                encodedValues.custom_present[closestIndex] === 'True' ||
-                                encodedValues.custom_present[closestIndex] === 'true';
-        
-        if (isCustomPresent) {
-          // Find the boundaries of the custom_present segment containing this point
-          // Go backwards to find segment start
-          let segmentStart = closestIndex;
-          while (segmentStart > 0) {
-            const prevValue = encodedValues.custom_present[segmentStart - 1];
-            const prevIsCustomPresent = prevValue === true || prevValue === 'True' || prevValue === 'true';
-            if (prevIsCustomPresent) {
-              segmentStart--;
-            } else {
-              break;
-            }
-          }
-          
-          // Go forwards to find segment end
-          let segmentEnd = closestIndex;
-          while (segmentEnd < coordinates.length - 1) {
-            const nextValue = encodedValues.custom_present[segmentEnd + 1];
-            const nextIsCustomPresent = nextValue === true || nextValue === 'True' || nextValue === 'true';
-            if (nextIsCustomPresent) {
-              segmentEnd++;
-            } else {
-              break;
-            }
-          }
-          
-          // Create segment for highlighting
-          const segmentCoords = coordinates.slice(segmentStart, segmentEnd + 1);
-          
-          // Only update if segment changed
-          const segmentKey = `${segmentStart}-${segmentEnd}`;
-          if (hoveredSegment !== segmentKey && segmentCoords.length > 1) {
-            hoveredSegment = segmentKey;
-            
-            // Update hover buffer layer
-            map.getSource('route-hover-buffer').setData({
-              type: 'Feature',
-              geometry: {
-                type: 'LineString',
-                coordinates: segmentCoords
-              },
-              properties: {}
-            });
-          }
+        selectedValue = encodedValues.custom_present[closestIndex];
+        valueLabel = 'Custom Present';
+      } else if (selectedType === 'surface' && encodedValues.surface && 
+                 encodedValues.surface[closestIndex] !== undefined && 
+                 encodedValues.surface[closestIndex] !== null) {
+        selectedValue = encodedValues.surface[closestIndex];
+        valueLabel = 'Surface';
+      }
+      
+      // Show popup only if we have a value for the selected type
+      if (selectedValue !== null) {
+        let displayValue = '';
+        if (typeof selectedValue === 'boolean') {
+          displayValue = selectedValue ? 'Ja' : 'Nein';
         } else {
-          // Not custom_present, clear hover buffer
-          if (hoveredSegment !== null) {
-            hoveredSegment = null;
-            map.getSource('route-hover-buffer').setData({
-              type: 'FeatureCollection',
-              features: []
-            });
-          }
+          displayValue = String(selectedValue);
         }
-      } else {
-        // No custom_present data, clear hover buffer
-        if (hoveredSegment !== null) {
-          hoveredSegment = null;
-          map.getSource('route-hover-buffer').setData({
-            type: 'FeatureCollection',
-            features: []
-          });
-        }
-      }
-      const details = [];
-      
-      // Elevation
-      if (elevations && elevations[closestIndex] !== undefined && elevations[closestIndex] !== null) {
-        details.push({
-          label: 'Höhe',
-          value: Math.round(elevations[closestIndex]) + ' m'
-        });
-      }
-      
-      // Time
-      if (encodedValues.time && encodedValues.time[closestIndex] !== undefined && encodedValues.time[closestIndex] !== null && encodedValues.time[closestIndex] !== 0) {
-        const timeSeconds = encodedValues.time[closestIndex];
-        const timeMinutes = Math.round(timeSeconds / 60);
-        details.push({
-          label: 'Zeit',
-          value: timeMinutes > 0 ? `${timeMinutes} min` : `${Math.round(timeSeconds)} s`
-        });
-      }
-      
-      // Distance
-      if (encodedValues.distance && encodedValues.distance[closestIndex] !== undefined && encodedValues.distance[closestIndex] !== null && encodedValues.distance[closestIndex] !== 0) {
-        const distMeters = encodedValues.distance[closestIndex];
-        details.push({
-          label: 'Distanz',
-          value: distMeters > 1000 ? `${(distMeters / 1000).toFixed(2)} km` : `${Math.round(distMeters)} m`
-        });
-      }
-      
-      // Street name
-      if (encodedValues.street_name && encodedValues.street_name[closestIndex] !== undefined && encodedValues.street_name[closestIndex] !== null && encodedValues.street_name[closestIndex] !== '') {
-        details.push({
-          label: 'Straße',
-          value: encodedValues.street_name[closestIndex]
-        });
-      }
-      
-      // Road class (if available)
-      if (encodedValues.road_class && encodedValues.road_class[closestIndex] !== undefined && encodedValues.road_class[closestIndex] !== null) {
-        details.push({
-          label: 'Straßenklasse',
-          value: String(encodedValues.road_class[closestIndex])
-        });
-      }
-      
-      // Road environment (if available)
-      if (encodedValues.road_environment && encodedValues.road_environment[closestIndex] !== undefined && encodedValues.road_environment[closestIndex] !== null) {
-        details.push({
-          label: 'Umgebung',
-          value: String(encodedValues.road_environment[closestIndex])
-        });
-      }
-      
-      // Road access (if available)
-      if (encodedValues.road_access && encodedValues.road_access[closestIndex] !== undefined && encodedValues.road_access[closestIndex] !== null) {
-        details.push({
-          label: 'Zugang',
-          value: String(encodedValues.road_access[closestIndex])
-        });
-      }
-      
-      // Surface (if available)
-      if (encodedValues.surface && encodedValues.surface[closestIndex] !== undefined && encodedValues.surface[closestIndex] !== null) {
-        details.push({
-          label: 'Oberfläche',
-          value: String(encodedValues.surface[closestIndex])
-        });
-      }
-      
-      // Custom present (if available)
-      if (encodedValues.custom_present && encodedValues.custom_present[closestIndex] !== undefined && encodedValues.custom_present[closestIndex] !== null) {
-        const customValue = encodedValues.custom_present[closestIndex];
-        details.push({
-          label: 'Custom Present',
-          value: typeof customValue === 'boolean' ? (customValue ? 'Ja' : 'Nein') : String(customValue)
-        });
-      }
-      
-      // Show any other available details dynamically (for any details that GraphHopper returns)
-      Object.keys(encodedValues).forEach(key => {
-        // Skip already displayed details and arrays from instructions
-        const knownKeys = ['time', 'distance', 'street_name'];
-        if (!knownKeys.includes(key) && 
-            encodedValues[key] && 
-            Array.isArray(encodedValues[key]) &&
-            encodedValues[key][closestIndex] !== undefined && 
-            encodedValues[key][closestIndex] !== null) {
-          const value = encodedValues[key][closestIndex];
-          // Format label nicely
-          const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-          details.push({
-            label: label,
-            value: typeof value === 'boolean' ? (value ? 'Ja' : 'Nein') : String(value)
-          });
-        }
-      });
-      
-      // Build popup HTML
-      if (details.length > 0) {
-        const detailsHTML = details.map(d => 
-          `<div style="margin: 2px 0;"><strong>${d.label}:</strong> ${d.value}</div>`
-        ).join('');
         
         popup
           .setLngLat(closestPoint)
-          .setHTML(`<div style="font-size: 12px; line-height: 1.4;">${detailsHTML}</div>`)
+          .setHTML(`<div style="font-size: 12px; line-height: 1.4;"><strong>${valueLabel}:</strong> ${displayValue}</div>`)
           .addTo(map);
+      } else {
+        popup.remove();
+      }
+      
+      // Clear hover buffer (no longer needed for highlighting)
+      if (hoveredSegment !== null) {
+        hoveredSegment = null;
+        map.getSource('route-hover-buffer').setData({
+          type: 'FeatureCollection',
+          features: []
+        });
       }
     }
   });
 }
 
-export function updateRouteColor(encodedType, encodedValues) {
-  if (!routeState.mapInstance || !routeState.currentRouteData) return;
-  
-  const { elevations, encodedValues: allEncodedValues } = routeState.currentRouteData;
-  const data = encodedType === 'elevation' ? elevations : (allEncodedValues[encodedType] || []);
-  
-  if (!data || data.length === 0) {
-    // Default color if no data
-    routeState.mapInstance.setPaintProperty('route-layer', 'line-color', '#3b82f6');
-    return;
+// Helper function to get color for encoded value
+function getColorForEncodedValue(encodedType, value, allValues = []) {
+  if (value === null || value === undefined) {
+    return '#9ca3af'; // Gray for null/undefined
   }
   
-  // For now, use average color - in a full implementation, we'd need to create segments
-  const validValues = data.filter(v => v !== null && v !== undefined);
-  if (validValues.length === 0) {
-    routeState.mapInstance.setPaintProperty('route-layer', 'line-color', '#3b82f6');
-    return;
+  if (encodedType === 'custom_present') {
+    const isCustomPresent = value === true || value === 'True' || value === 'true';
+    return isCustomPresent ? '#3b82f6' : '#ec4899'; // Blue for true, Pink for false
+  }
+  
+  if (encodedType === 'surface') {
+    const surfaceColors = {
+      'asphalt': '#22c55e',      // Green
+      'concrete': '#f97316',      // Orange
+      'paved': '#3b82f6',        // Blue
+      'unpaved': '#a855f7',       // Purple
+      'gravel': '#ec4899',        // Pink
+      'dirt': '#78350f',          // Brown
+      'sand': '#eab308',          // Yellow
+      'grass': '#16a34a',         // Dark green
+      'ground': '#78350f',        // Brown
+      'compacted': '#6b7280',     // Gray
+      'fine_gravel': '#fb923c',   // Light orange
+      'pebblestone': '#a855f7',  // Purple
+      'cobblestone': '#6366f1',   // Indigo
+      'wood': '#b45309',          // Dark orange
+      'metal': '#475569',         // Slate
+      'sett': '#6366f1',          // Indigo
+      'paving_stones': '#6366f1'  // Indigo
+    };
+    const normalizedValue = String(value).toLowerCase();
+    return surfaceColors[normalizedValue] || '#9ca3af'; // Default gray
   }
   
   if (encodedType === 'elevation' || encodedType === 'time' || encodedType === 'distance') {
-    // Numeric data - use gradient color based on average
+    // Numeric data - use gradient color
+    const validValues = allValues.filter(v => v !== null && v !== undefined);
+    if (validValues.length === 0) return '#3b82f6';
+    
     const minValue = Math.min(...validValues);
     const maxValue = Math.max(...validValues);
     const range = maxValue - minValue || 1;
-    const avgValue = validValues.reduce((a, b) => a + b, 0) / validValues.length;
-    const normalized = (avgValue - minValue) / range;
+    const normalized = (value - minValue) / range;
     
-    let color = '#3b82f6';
-    if (normalized < 0.25) color = '#3b82f6';
-    else if (normalized < 0.5) color = '#10b981';
-    else if (normalized < 0.75) color = '#f59e0b';
-    else color = '#ef4444';
-    
-    routeState.mapInstance.setPaintProperty('route-layer', 'line-color', color);
-  } else {
-    // Categorical data
-    const uniqueValues = [...new Set(data.filter(v => v !== null && v !== undefined && v !== ''))];
-    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
-    const firstValue = data.find(v => v !== null && v !== undefined && v !== '');
-    if (firstValue !== undefined) {
-      const valueIndex = uniqueValues.indexOf(firstValue);
-      const color = colors[valueIndex % colors.length];
-      routeState.mapInstance.setPaintProperty('route-layer', 'line-color', color);
-    }
+    if (normalized < 0.25) return '#3b82f6'; // Blue
+    else if (normalized < 0.5) return '#10b981'; // Green
+    else if (normalized < 0.75) return '#f59e0b'; // Orange
+    else return '#ef4444'; // Red
   }
+  
+  // Categorical data - assign colors based on unique values
+  const uniqueValues = [...new Set(allValues.filter(v => v !== null && v !== undefined && v !== ''))];
+  const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6'];
+  const valueIndex = uniqueValues.indexOf(value);
+  return valueIndex >= 0 ? colors[valueIndex % colors.length] : '#9ca3af';
+}
+
+export function updateRouteColor(encodedType, encodedValues) {
+  if (!routeState.mapInstance || !routeState.currentRouteData) return;
+  
+  const { coordinates } = routeState.currentRouteData;
+  const { elevations, encodedValues: allEncodedValues } = routeState.currentRouteData;
+  const data = encodedType === 'elevation' ? elevations : (allEncodedValues[encodedType] || []);
+  
+  if (!data || data.length === 0 || !coordinates || coordinates.length === 0) {
+    // Default: single segment with default color
+    routeState.mapInstance.getSource('route').setData({
+      type: 'Feature',
+      geometry: {
+        type: 'LineString',
+        coordinates: coordinates || []
+      },
+      properties: {
+        color: '#3b82f6'
+      }
+    });
+    
+    // Update layer to use property-based coloring
+    routeState.mapInstance.setPaintProperty('route-layer', 'line-color', ['get', 'color']);
+    return;
+  }
+  
+  // Create segments based on encoded value
+  const segments = [];
+  let currentSegment = null;
+  let currentValue = null;
+  
+  // Helper function to normalize values for comparison (treat null and undefined as equal)
+  const normalizeValue = (val) => {
+    if (val === null || val === undefined) return null;
+    return val;
+  };
+  
+  coordinates.forEach((coord, index) => {
+    const value = normalizeValue(data[index]);
+    const normalizedCurrentValue = normalizeValue(currentValue);
+    
+    // Check if value changed or is first point
+    if (value !== normalizedCurrentValue || index === 0) {
+      // Save previous segment if exists
+      if (currentSegment !== null && currentSegment.length > 0) {
+        // Always add the current point to close the previous segment (to avoid gaps)
+        // This ensures seamless connection between segments
+        const segmentToSave = [...currentSegment, coord];
+        
+        // Only add segment if it has at least 2 points
+        if (segmentToSave.length > 1) {
+          const color = getColorForEncodedValue(encodedType, currentValue, data);
+          segments.push({
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: segmentToSave
+            },
+            properties: {
+              color: color,
+              value: currentValue
+            }
+          });
+        }
+      }
+      
+      // Start new segment with current point (which is also the last point of previous segment)
+      // This ensures no gaps between segments
+      currentSegment = [coord];
+      currentValue = data[index]; // Store original value, not normalized
+    } else {
+      // Continue current segment
+      currentSegment.push(coord);
+    }
+  });
+  
+  // Add final segment (must have at least 2 points)
+  if (currentSegment !== null && currentSegment.length > 1) {
+    const color = getColorForEncodedValue(encodedType, currentValue, data);
+    segments.push({
+      type: 'Feature',
+      geometry: {
+        type: 'LineString',
+        coordinates: currentSegment
+      },
+      properties: {
+        color: color,
+        value: currentValue
+      }
+    });
+  } else if (currentSegment !== null && currentSegment.length === 1 && segments.length > 0) {
+    // If final segment has only one point, merge it with the last segment
+    const lastSegment = segments[segments.length - 1];
+    lastSegment.geometry.coordinates.push(currentSegment[0]);
+  }
+  
+  // Update route source with segments
+  routeState.mapInstance.getSource('route').setData({
+    type: 'FeatureCollection',
+    features: segments
+  });
+  
+  // Update layer to use property-based coloring
+  routeState.mapInstance.setPaintProperty('route-layer', 'line-color', ['get', 'color']);
 }
 
 export function updateRouteColorByProfile(map, profile) {
