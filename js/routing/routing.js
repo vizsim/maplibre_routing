@@ -123,10 +123,6 @@ export async function calculateRoute(map, start, end) {
     calculateBtn.disabled = true;
     calculateBtn.textContent = 'Berechne...';
   }
-  
-  if (routeInfo) {
-    routeInfo.textContent = 'Route wird berechnet...';
-  }
 
   try {
     // GraphHopper API call - request GeoJSON format with points_encoded=false and elevation data
