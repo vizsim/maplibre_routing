@@ -221,23 +221,68 @@ export class Permalink {
     }
     
     // Load context layers
+    // Store state for activation after map loads
     const bikelanesParam = params.get('bikelanes');
-    if (bikelanesParam === '1') {
-      const toggleBikelanes = document.getElementById('toggle-bikelanes');
-      if (toggleBikelanes) {
-        toggleBikelanes.checked = true;
-        // Trigger change event to show layers
-        toggleBikelanes.dispatchEvent(new Event('change'));
-      }
-    }
-    
     const missingStreetsParam = params.get('missingStreets');
-    if (missingStreetsParam === '1') {
-      const toggleMissingStreets = document.getElementById('toggle-missing-streets');
-      if (toggleMissingStreets) {
-        toggleMissingStreets.checked = true;
-        // Trigger change event to show layers
-        toggleMissingStreets.dispatchEvent(new Event('change'));
+    
+    if (bikelanesParam === '1' || missingStreetsParam === '1') {
+      // Function to activate context layers
+      const activateContextLayers = () => {
+        if (bikelanesParam === '1') {
+          const toggleBikelanes = document.getElementById('toggle-bikelanes');
+          if (toggleBikelanes) {
+            toggleBikelanes.checked = true;
+            // Trigger change event to show layers
+            toggleBikelanes.dispatchEvent(new Event('change'));
+          }
+        }
+        
+        if (missingStreetsParam === '1') {
+          const toggleMissingStreets = document.getElementById('toggle-missing-streets');
+          if (toggleMissingStreets) {
+            toggleMissingStreets.checked = true;
+            // Trigger change event to show layers
+            // Retry if layers don't exist yet (they might be created asynchronously)
+            let retryCount = 0;
+            const maxRetries = 25; // 25 * 200ms = 5 seconds
+            const activateMissingStreets = () => {
+              const layers = [
+                'missing-streets-missing-roads',
+                'missing-streets-missing-bikelanes',
+                'missing-streets-regular-roads',
+                'missing-streets-regular-bikelanes',
+                'missing-streets-pano-roads',
+                'missing-streets-pano-bikelanes'
+              ];
+              const allLayersExist = layers.every(layerId => this.map.getLayer(layerId));
+              
+              if (allLayersExist) {
+                toggleMissingStreets.dispatchEvent(new Event('change'));
+              } else {
+                // Retry after a short delay
+                retryCount++;
+                if (retryCount < maxRetries) {
+                  setTimeout(activateMissingStreets, 200);
+                } else {
+                  console.warn('Permalink: Could not activate missingStreets layers - layers not available');
+                }
+              }
+            };
+            activateMissingStreets();
+          }
+        }
+      };
+      
+      // Wait for map to load before activating layers
+      if (this.map.loaded()) {
+        // Map already loaded, wait a bit for layers to be created
+        setTimeout(activateContextLayers, 500);
+      } else {
+        // Map not loaded yet, wait for load event
+        this.map.once('load', () => {
+          // Additional delay to ensure layers are created
+          setTimeout(activateContextLayers, 500);
+        });
       }
     }
     
