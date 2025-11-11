@@ -335,16 +335,16 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
       drawElevationLine(ctx, points);
       
       // Fill area under elevation curve based on selected encoded value
-      const selectedType = select ? select.value : 'custom_present';
+      const selectedType = select ? select.value : 'mapillary_coverage';
       
       // Use generic fillSegmentsByValue function for all encoded value types
-      if (selectedType === 'custom_present' && encodedValues.custom_present && encodedValues.custom_present.length > 0 && points.length > 0) {
-        // Custom color function for custom_present (boolean-like values)
+      if (selectedType === 'mapillary_coverage' && encodedValues.mapillary_coverage && encodedValues.mapillary_coverage.length > 0 && points.length > 0) {
+        // Custom color function for mapillary_coverage (boolean-like values)
         const getCustomPresentColor = (value) => {
           const isTrue = value === true || value === 'True' || value === 'true';
           return isTrue ? 'rgba(59, 130, 246, 0.3)' : 'rgba(236, 72, 153, 0.3)';
         };
-        fillSegmentsByValue(ctx, points, encodedValues.custom_present, getCustomPresentColor, padding, graphHeight);
+        fillSegmentsByValue(ctx, points, encodedValues.mapillary_coverage, getCustomPresentColor, padding, graphHeight);
       } else if (selectedType === 'surface' && encodedValues.surface && encodedValues.surface.length > 0 && points.length > 0) {
         fillSegmentsByValue(ctx, points, encodedValues.surface, getSurfaceColor, padding, graphHeight);
       } else if (selectedType === 'road_class' && encodedValues.road_class && encodedValues.road_class.length > 0 && points.length > 0) {
@@ -374,7 +374,7 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
   }
   
   // Update stats
-  const statsSelectedType = select ? select.value : 'custom_present';
+  const statsSelectedType = select ? select.value : 'mapillary_coverage';
   updateHeightgraphStats(statsSelectedType, encodedValues);
 }
 
@@ -561,7 +561,7 @@ function fillSegment(ctx, points, startIdx, endIdx, color, padding, graphHeight)
 }
 
 // Fill segments based on encoded values
-// Generic function that works for custom_present, surface, road_class, etc.
+// Generic function that works for mapillary_coverage, surface, road_class, etc.
 function fillSegmentsByValue(ctx, points, values, getColor, padding, graphHeight) {
   if (!points || points.length === 0 || !values || values.length === 0) return;
   
@@ -626,7 +626,7 @@ export function updateHeightgraphStats(encodedType, encodedValues) {
     
     // Normalize value for key (treat boolean-like values consistently)
     let key;
-    if (encodedType === 'custom_present') {
+    if (encodedType === 'mapillary_coverage') {
       const isTrue = value === true || value === 'True' || value === 'true';
       key = isTrue ? 'true' : 'false';
     } else {
@@ -657,7 +657,7 @@ export function updateHeightgraphStats(encodedType, encodedValues) {
     let displayKey = key;
     let backgroundColor = '';
     
-    if (encodedType === 'custom_present') {
+    if (encodedType === 'mapillary_coverage') {
       displayKey = key === 'true' ? 'true' : 'false';
       // Use same colors as route visualization: blue for true, pink for false
       backgroundColor = key === 'true' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(236, 72, 153, 0.15)';
@@ -705,7 +705,7 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
   
   const { encodedValues } = routeState.currentRouteData;
   const select = document.getElementById('heightgraph-encoded-select');
-  const selectedType = select ? select.value : 'custom_present';
+  const selectedType = select ? select.value : 'mapillary_coverage';
   // Use same padding values as in drawHeightgraph
   const padding = HEIGHTGRAPH_CONFIG.padding;
   
@@ -890,14 +890,14 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
         tooltipContent += `Höhe: ${Math.round(elevation)} m<br>`;
       }
       
-      // Add selected encoded value (custom_present, surface, or road_class)
-      if (selectedType === 'custom_present' && encodedValues.custom_present && encodedValues.custom_present[dataIndex] !== undefined && 
-          encodedValues.custom_present[dataIndex] !== null) {
-        const customValue = encodedValues.custom_present[dataIndex];
+      // Add selected encoded value (mapillary_coverage, surface, or road_class)
+      if (selectedType === 'mapillary_coverage' && encodedValues.mapillary_coverage && encodedValues.mapillary_coverage[dataIndex] !== undefined && 
+          encodedValues.mapillary_coverage[dataIndex] !== null) {
+        const customValue = encodedValues.mapillary_coverage[dataIndex];
         const customPresentText = typeof customValue === 'boolean' 
           ? (customValue ? 'Ja' : 'Nein') 
           : String(customValue);
-        tooltipContent += `Custom Present: ${customPresentText}`;
+        tooltipContent += `Mapillary Coverage: ${customPresentText}`;
       } else if (selectedType === 'surface' && encodedValues.surface && encodedValues.surface[dataIndex] !== undefined && 
                  encodedValues.surface[dataIndex] !== null) {
         const surfaceValue = encodedValues.surface[dataIndex];

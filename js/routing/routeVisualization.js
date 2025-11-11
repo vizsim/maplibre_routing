@@ -1,4 +1,4 @@
-// Route visualization: colors, hover effects, custom_present highlighting
+// Route visualization: colors, hover effects, mapillary_coverage highlighting
 
 import { routeState } from './routeState.js';
 import { getColorForEncodedValue } from './colorSchemes.js';
@@ -62,17 +62,17 @@ export function setupRouteHover(map) {
       
       // Get selected encoded type from heightgraph dropdown
       const select = document.getElementById('heightgraph-encoded-select');
-      const selectedType = select ? select.value : 'custom_present';
+      const selectedType = select ? select.value : 'mapillary_coverage';
       
       // Get the value for the selected encoded type at this point
       let selectedValue = null;
       let valueLabel = '';
       
-      if (selectedType === 'custom_present' && encodedValues.custom_present && 
-          encodedValues.custom_present[closestIndex] !== undefined && 
-          encodedValues.custom_present[closestIndex] !== null) {
-        selectedValue = encodedValues.custom_present[closestIndex];
-        valueLabel = 'Custom Present';
+      if (selectedType === 'mapillary_coverage' && encodedValues.mapillary_coverage && 
+          encodedValues.mapillary_coverage[closestIndex] !== undefined && 
+          encodedValues.mapillary_coverage[closestIndex] !== null) {
+        selectedValue = encodedValues.mapillary_coverage[closestIndex];
+        valueLabel = 'Mapillary Coverage';
       } else if (selectedType === 'surface' && encodedValues.surface && 
                  encodedValues.surface[closestIndex] !== undefined && 
                  encodedValues.surface[closestIndex] !== null) {

@@ -48,7 +48,7 @@ export const ROAD_CLASS_COLORS = {
   'living_street': '#fb923c'  // Light orange
 };
 
-// Custom present colors
+// Mapillary coverage colors
 export const CUSTOM_PRESENT_COLORS = {
   true: '#3b82f6',   // Blue for true
   false: '#ec4899'   // Pink for false
@@ -106,8 +106,8 @@ export function getRoadClassColorRgba(value, opacity = 0.3) {
 }
 
 /**
- * Get custom present color
- * @param {boolean|string} value - Custom present value
+ * Get mapillary coverage color
+ * @param {boolean|string} value - Mapillary coverage value
  * @returns {string} Hex color
  */
 export function getCustomPresentColor(value) {
@@ -128,7 +128,7 @@ export function getColorForEncodedValue(encodedType, value, allValues = []) {
     return DEFAULT_COLOR;
   }
   
-  if (encodedType === 'custom_present') {
+  if (encodedType === 'mapillary_coverage') {
     return getCustomPresentColor(value);
   }
   

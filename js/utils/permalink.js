@@ -121,7 +121,7 @@ export class Permalink {
     }
     
     // Encoded value type
-    if (routeState.currentEncodedType && routeState.currentEncodedType !== 'custom_present') {
+    if (routeState.currentEncodedType && routeState.currentEncodedType !== 'mapillary_coverage') {
       params.set('encoded', routeState.currentEncodedType);
     }
     
@@ -318,7 +318,7 @@ export class Permalink {
       params.set('profile', routeState.selectedProfile);
     }
     
-    if (routeState.currentEncodedType && routeState.currentEncodedType !== 'custom_present') {
+    if (routeState.currentEncodedType && routeState.currentEncodedType !== 'mapillary_coverage') {
       params.set('encoded', routeState.currentEncodedType);
     }
     

@@ -64,7 +64,7 @@ export function setupRouting(map) {
     });
   }
   
-  // Create layer for route line (on top of custom_present layer)
+  // Create layer for route line (on top of mapillary_coverage layer)
   if (!map.getLayer('route-layer')) {
     map.addLayer({
       id: 'route-layer',
@@ -158,13 +158,13 @@ export async function calculateRoute(map, start, end) {
   try {
     // GraphHopper API call - request GeoJSON format with points_encoded=false and elevation data
     // GraphHopper expects point as lat,lng
-    // Request details - format: details=surface&details=custom_present (multiple parameters)
-    // or details=surface,custom_present (comma-separated)
+    // Request details - format: details=surface&details=mapillary_coverage (multiple parameters)
+    // or details=surface,mapillary_coverage (comma-separated)
     const baseUrl = `${GRAPHHOPPER_URL}/route?point=${start[1]},${start[0]}&point=${end[1]},${end[0]}&profile=${routeState.selectedProfile}&points_encoded=false&elevation=true`;
     
     // Try different formats for requesting details
     // Format 1: Multiple detail parameters (as GraphHopper web UI might use)
-    const detailsParams = ['surface', 'custom_present', 'road_class', 'road_access']
+    const detailsParams = ['surface', 'mapillary_coverage', 'road_class', 'road_access']
       .map(d => `details=${d}`)
       .join('&');
     const url = `${baseUrl}&${detailsParams}&type=json`;
@@ -186,7 +186,7 @@ export async function calculateRoute(map, start, end) {
       console.warn('Details request failed with multiple params, trying comma-separated:', errorText);
       
       // Format 2: Comma-separated
-      const detailsComma = ['surface', 'custom_present', 'road_class', 'road_access'].join(',');
+      const detailsComma = ['surface', 'mapillary_coverage', 'road_class', 'road_access'].join(',');
       const urlComma = `${baseUrl}&details=${detailsComma}&type=json`;
       try {
         response = await fetch(urlComma);
@@ -336,9 +336,9 @@ export async function calculateRoute(map, start, end) {
               timeArray[i] = inst.time || 0;
               distanceArray[i] = inst.distance || 0;
               streetNameArray[i] = inst.street_name || '';
-              // Check if custom_present is in instruction or details
-              if (inst.custom_present !== undefined) {
-                customPresentArray[i] = inst.custom_present;
+              // Check if mapillary_coverage is in instruction or details
+              if (inst.mapillary_coverage !== undefined) {
+                customPresentArray[i] = inst.mapillary_coverage;
               }
             }
           }
@@ -348,9 +348,9 @@ export async function calculateRoute(map, start, end) {
         encodedValues.time = timeArray;
         encodedValues.distance = distanceArray;
         encodedValues.street_name = streetNameArray;
-        // Only set custom_present if we have values
+        // Only set mapillary_coverage if we have values
         if (customPresentArray.some(v => v !== null)) {
-          encodedValues.custom_present = customPresentArray;
+          encodedValues.mapillary_coverage = customPresentArray;
         }
         
         console.log('Extracted from instructions:', {
@@ -379,7 +379,7 @@ export async function calculateRoute(map, start, end) {
         distance: encodedValues.distance ? `${encodedValues.distance.length} values` : 'not available',
         street_name: encodedValues.street_name ? `${encodedValues.street_name.length} values` : 'not available',
         surface: encodedValues.surface ? `${encodedValues.surface.length} values` : 'not available',
-        custom_present: encodedValues.custom_present ? `${encodedValues.custom_present.length} values` : 'not available',
+        mapillary_coverage: encodedValues.mapillary_coverage ? `${encodedValues.mapillary_coverage.length} values` : 'not available',
         road_class: encodedValues.road_class ? `${encodedValues.road_class.length} values` : 'not available',
         road_environment: encodedValues.road_environment ? `${encodedValues.road_environment.length} values` : 'not available',
         road_access: encodedValues.road_access ? `${encodedValues.road_access.length} values` : 'not available'
@@ -404,7 +404,7 @@ export async function calculateRoute(map, start, end) {
       
       // Update route color based on selected encoded value
       const select = document.getElementById('heightgraph-encoded-select');
-      const selectedType = select ? select.value : 'custom_present';
+      const selectedType = select ? select.value : 'mapillary_coverage';
       updateRouteColor(selectedType, encodedValues);
       
       // Update route info
@@ -567,7 +567,7 @@ export function clearRoute(map) {
     features: []
   });
   
-  // Clear custom_present layer
+  // Clear mapillary_coverage layer
   
   // Clear hover buffer layer
   if (map.getSource('route-hover-buffer')) {

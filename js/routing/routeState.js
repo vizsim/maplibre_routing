@@ -22,7 +22,7 @@ export const routeState = {
   
   // Route data
   currentRouteData: null,
-  currentEncodedType: 'custom_present',
+  currentEncodedType: 'mapillary_coverage',
   
   // Initialize state
   init(map) {
