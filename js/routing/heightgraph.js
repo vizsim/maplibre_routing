@@ -308,8 +308,8 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
   if (baseData.length > 0) {
     const baseValid = baseData.filter(v => v !== null && v !== undefined);
     if (baseValid.length > 0) {
-      const baseMin = Math.min(...baseValid);
-      const baseMax = Math.max(...baseValid);
+      const baseMin = Math.min(...baseValid) - 10; // Add 10m padding below
+      const baseMax = Math.max(...baseValid) + 10; // Add 10m padding above
       const baseRange = baseMax - baseMin || 1;
       
       // Store points for area filling
@@ -417,8 +417,8 @@ function drawGrid(ctx, padding, graphWidth, graphHeight, baseData) {
   if (baseData.length > 0) {
     const baseValid = baseData.filter(v => v !== null && v !== undefined);
     if (baseValid.length > 0) {
-      elevationMin = Math.min(...baseValid);
-      elevationMax = Math.max(...baseValid);
+      elevationMin = Math.min(...baseValid) - 10; // Add 10m padding below
+      elevationMax = Math.max(...baseValid) + 10; // Add 10m padding above
       elevationRange = elevationMax - elevationMin || 1;
     }
   }
