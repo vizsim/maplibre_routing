@@ -140,7 +140,14 @@ export async function calculateRoute(map, start, end) {
     
     console.log('Requesting route with URL:', url);
     
-    let response = await fetch(url);
+    let response;
+    try {
+      response = await fetch(url);
+    } catch (error) {
+      // Network error (server not running, CORS, etc.)
+      console.error('Network error fetching route:', error);
+      throw new Error(`Network error: ${error.message}. Make sure GraphHopper is running on ${GRAPHHOPPER_URL}`);
+    }
     
     // If details request fails, try comma-separated format
     if (!response.ok) {
@@ -150,14 +157,24 @@ export async function calculateRoute(map, start, end) {
       // Format 2: Comma-separated
       const detailsComma = ['surface', 'custom_present', 'road_class', 'road_access'].join(',');
       const urlComma = `${baseUrl}&details=${detailsComma}&type=json`;
-      response = await fetch(urlComma);
+      try {
+        response = await fetch(urlComma);
+      } catch (error) {
+        console.error('Network error fetching route (comma-separated):', error);
+        throw new Error(`Network error: ${error.message}. Make sure GraphHopper is running on ${GRAPHHOPPER_URL}`);
+      }
       
       // If still fails, try without details
       if (!response.ok) {
         const errorText2 = await response.text();
         console.warn('Details request failed with comma-separated, trying without details:', errorText2);
         const urlNoDetails = `${baseUrl}&type=json`;
-        response = await fetch(urlNoDetails);
+        try {
+          response = await fetch(urlNoDetails);
+        } catch (error) {
+          console.error('Network error fetching route (no details):', error);
+          throw new Error(`Network error: ${error.message}. Make sure GraphHopper is running on ${GRAPHHOPPER_URL}`);
+        }
         
         if (!response.ok) {
           const errorText3 = await response.text();

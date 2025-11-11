@@ -8,6 +8,9 @@ let heightgraphMouseMoveHandler = null;
 let heightgraphMouseLeaveHandler = null;
 let routeHighlightMarker = null;
 
+// Store resize handler to prevent duplicate listeners
+let heightgraphResizeHandler = null;
+
 export function setupHeightgraphHandlers() {
   const select = document.getElementById('heightgraph-encoded-select');
   if (select) {
@@ -24,6 +27,30 @@ export function setupHeightgraphHandlers() {
       }
     });
   }
+  
+  // Add resize handler to redraw chart when window size changes
+  if (heightgraphResizeHandler) {
+    window.removeEventListener('resize', heightgraphResizeHandler);
+  }
+  
+  heightgraphResizeHandler = () => {
+    // Debounce resize events
+    clearTimeout(heightgraphResizeHandler.timeout);
+    heightgraphResizeHandler.timeout = setTimeout(() => {
+      if (routeState.currentRouteData) {
+        const select = document.getElementById('heightgraph-encoded-select');
+        const currentType = select ? select.value : routeState.currentEncodedType;
+        const { elevations, distance, encodedValues } = routeState.currentRouteData;
+        drawHeightgraph(elevations || [], distance, encodedValues || {}, routeState.currentRouteData?.coordinates || []);
+        // Update route color on map
+        updateRouteColor(currentType, encodedValues || {});
+        // Update stats
+        updateHeightgraphStats(currentType, encodedValues || {});
+      }
+    }, 150);
+  };
+  
+  window.addEventListener('resize', heightgraphResizeHandler);
 }
 
 export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, coordinates = [], skipInteractivity = false) {
@@ -87,11 +114,17 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
     return;
   }
   
-  // Set canvas size
-  const width = container.clientWidth - 20; // Account for padding
+  // Set canvas size - use more of the available width
+  // Ensure width doesn't exceed container width to prevent overflow
+  const maxWidth = container.clientWidth || 320; // Fallback to 320 if clientWidth is 0
+  const width = Math.max(100, maxWidth); // Minimum 100px width
   const height = 150;
   canvas.width = width;
   canvas.height = height;
+  // Ensure CSS size matches actual canvas size to avoid scaling issues
+  canvas.style.width = width + 'px';
+  canvas.style.height = height + 'px';
+  canvas.style.maxWidth = '100%'; // Prevent overflow
   
   const ctx = canvas.getContext('2d');
   
@@ -128,8 +161,8 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
     valueRange = maxValue - minValue || 1;
   }
   
-  // Padding
-  const padding = { top: 20, right: 20, bottom: 30, left: 50 };
+  // Padding - minimal padding to maximize chart width
+  const padding = { top: 20, right: 5, bottom: 30, left: 25 };
   const graphWidth = width - padding.left - padding.right;
   const graphHeight = height - padding.top - padding.bottom;
   
@@ -181,7 +214,7 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
       ctx.fillStyle = '#6b7280';
       ctx.font = '10px sans-serif';
       ctx.textAlign = 'right';
-      ctx.fillText(labelText, padding.left - 5, y + 3);
+      ctx.fillText(labelText, padding.left - 3, y + 3);
     }
   }
   
@@ -387,43 +420,56 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
     }
   }
   
-  // Draw distance labels on x-axis (natural numbers, no duplicates, with 0.5km steps if needed)
+  // Draw distance labels on x-axis with dynamic step size based on total distance
   ctx.fillStyle = '#6b7280';
   ctx.font = '10px sans-serif';
   ctx.textAlign = 'center';
   
   const totalDistanceKm = totalDistance / 1000;
-  let distanceSteps = 5;
-  let stepSize = totalDistanceKm / distanceSteps;
+  const maxTicks = 8; // Maximum number of ticks to avoid overcrowding
   
-  // If total distance is small and would only show 0 and 1 km, use 0.5 km steps
-  if (totalDistanceKm <= 1.5 && stepSize >= 0.3) {
-    distanceSteps = Math.ceil(totalDistanceKm * 2); // Double the steps for 0.5km increments
-    stepSize = 0.5;
-  } else {
-    stepSize = totalDistanceKm / distanceSteps;
+  // Determine appropriate step size based on total distance
+  // Try different step sizes and pick one that gives reasonable number of ticks
+  let stepSize;
+  let useHalfSteps = false;
+  
+  // Try step sizes in order: 0.5, 1, 2, 5, 10, 20, 50, ...
+  const possibleStepSizes = [0.5, 1, 2, 5, 10, 20, 50, 100];
+  
+  for (const candidateStepSize of possibleStepSizes) {
+    const numTicks = Math.ceil(totalDistanceKm / candidateStepSize);
+    if (numTicks <= maxTicks || candidateStepSize === possibleStepSizes[possibleStepSizes.length - 1]) {
+      stepSize = candidateStepSize;
+      useHalfSteps = (candidateStepSize === 0.5);
+      break;
+    }
   }
   
-  const xLabels = new Set(); // Track X-axis labels to avoid duplicates
-  
-  for (let i = 0; i <= distanceSteps; i++) {
-    const x = padding.left + (graphWidth / distanceSteps) * i;
-    const distance = stepSize * i;
-    
-    // Format: use natural numbers, but allow 0.5 km if stepSize is 0.5
-    let labelText;
-    if (stepSize === 0.5) {
-      // Show 0.5 km steps
-      labelText = distance.toFixed(1) + ' km';
-    } else {
-      // Show natural numbers (whole numbers)
-      const distanceRounded = Math.round(distance);
-      labelText = distanceRounded + ' km';
+  // Generate ticks based on step size
+  const ticks = [];
+  if (useHalfSteps) {
+    // For 0.5 km steps: 0.5, 1.0, 1.5, 2.0, ...
+    for (let distance = stepSize; distance <= totalDistanceKm; distance += stepSize) {
+      const roundedDistance = Math.round(distance * 10) / 10;
+      ticks.push(roundedDistance);
     }
+  } else {
+    // For whole number steps: 1, 2, 3, ... or 2, 4, 6, ... or 5, 10, 15, ...
+    for (let distance = stepSize; distance <= totalDistanceKm; distance += stepSize) {
+      ticks.push(distance);
+    }
+  }
+  
+  // Draw ticks
+  for (const distance of ticks) {
+    // Calculate x position based on distance ratio to total distance
+    const distanceRatio = totalDistanceKm > 0 ? distance / totalDistanceKm : 0;
+    const x = padding.left + graphWidth * distanceRatio;
     
-    // Only draw label if it's not a duplicate
-    if (!xLabels.has(labelText)) {
-      xLabels.add(labelText);
+    // Only draw if within bounds
+    if (x >= padding.left && x <= padding.left + graphWidth) {
+      // Format: show whole numbers without .0, decimals with .1
+      const labelText = (distance % 1 === 0 ? distance.toFixed(0) : distance.toFixed(1)) + ' km';
       ctx.fillText(labelText, x, height - 5);
     }
   }
@@ -435,6 +481,9 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
     if (indicatorCanvas) {
       indicatorCanvas.width = canvas.width;
       indicatorCanvas.height = canvas.height;
+      // Ensure CSS size matches actual canvas size to avoid scaling issues
+      indicatorCanvas.style.width = canvas.width + 'px';
+      indicatorCanvas.style.height = canvas.height + 'px';
     }
     setupHeightgraphInteractivity(canvas, baseData, totalDistance, coordinates);
   }
@@ -661,7 +710,8 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
   const { encodedValues } = routeState.currentRouteData;
   const select = document.getElementById('heightgraph-encoded-select');
   const selectedType = select ? select.value : 'custom_present';
-  const padding = { top: 20, right: 20, bottom: 30, left: 50 };
+  // Use same padding values as in drawHeightgraph
+  const padding = { top: 20, right: 5, bottom: 30, left: 25 };
   const graphWidth = canvas.width - padding.left - padding.right;
   const graphHeight = canvas.height - padding.top - padding.bottom;
   
@@ -705,9 +755,16 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    // Check if mouse is within graph area
-    if (x < padding.left || x > padding.left + graphWidth || 
-        y < padding.top || y > padding.top + graphHeight) {
+    // Calculate graph boundaries - use actual canvas width minus padding
+    const rightBoundary = padding.left + graphWidth;
+    const bottomBoundary = padding.top + graphHeight;
+    
+    // Check if mouse is within graph area (include edges with tolerance)
+    // Allow tolerance on the right edge to ensure full coverage (account for rounding/pixel issues)
+    // Use a percentage-based tolerance to handle different canvas sizes
+    const tolerance = Math.max(5, graphWidth * 0.1); // At least 5px or 10% of graph width
+    if (x < padding.left || x > rightBoundary + tolerance || 
+        y < padding.top || y > bottomBoundary) {
       tooltip.style.display = 'none';
       if (routeHighlightMarker) {
         routeHighlightMarker.remove();
@@ -724,8 +781,14 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
     }
     
     // Calculate which point in the data corresponds to this x position
-    const relativeX = x - padding.left;
-    const dataIndex = Math.round((relativeX / graphWidth) * (elevations.length - 1));
+    // Clamp relativeX to ensure it's within bounds (even with tolerance)
+    let relativeX = x - padding.left;
+    // If x is beyond rightBoundary but within tolerance, clamp to graphWidth
+    if (relativeX > graphWidth) {
+      relativeX = graphWidth;
+    }
+    relativeX = Math.max(0, Math.min(graphWidth, relativeX));
+    const dataIndex = Math.min(elevations.length - 1, Math.max(0, Math.round((relativeX / graphWidth) * (elevations.length - 1))));
     
     if (dataIndex >= 0 && dataIndex < elevations.length && dataIndex < coordinates.length) {
       const elevation = elevations[dataIndex];
@@ -816,6 +879,7 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
         }
         
         // Draw vertical indicator line on heightgraph using separate overlay canvas
+        // Always draw at exact mouse position x (no clamping)
         const indicatorCanvas = document.getElementById('heightgraph-indicator-canvas');
         if (indicatorCanvas) {
           const indicatorCtx = indicatorCanvas.getContext('2d');
@@ -823,7 +887,7 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
           // Clear previous indicator line
           indicatorCtx.clearRect(0, 0, indicatorCanvas.width, indicatorCanvas.height);
           
-          // Draw new indicator line
+          // Draw new indicator line at exact mouse position
           indicatorCtx.strokeStyle = '#ef4444';
           indicatorCtx.lineWidth = 2;
           indicatorCtx.beginPath();
