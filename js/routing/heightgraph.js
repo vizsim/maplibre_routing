@@ -217,8 +217,10 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
       
       ctx.stroke();
       
-      // Fill area under elevation curve with custom_present coloring
-      if (encodedValues.custom_present && encodedValues.custom_present.length > 0 && points.length > 0) {
+      // Fill area under elevation curve based on selected encoded value
+      const selectedType = select ? select.value : 'custom_present';
+      
+      if (selectedType === 'custom_present' && encodedValues.custom_present && encodedValues.custom_present.length > 0 && points.length > 0) {
         // Fill segment by segment based on custom_present
         for (let i = 0; i < points.length - 1; i++) {
           const point1 = points[i];
@@ -242,8 +244,53 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
           ctx.closePath();
           ctx.fill();
         }
+      } else if (selectedType === 'surface' && encodedValues.surface && encodedValues.surface.length > 0 && points.length > 0) {
+        // Fill segment by segment based on surface
+        // Group consecutive segments with the same surface value
+        let currentSurface = null;
+        let segmentStart = 0;
+        
+        for (let i = 0; i < points.length; i++) {
+          const surfaceValue = encodedValues.surface[points[i].index];
+          
+          if (surfaceValue !== currentSurface) {
+            // Fill previous segment if exists
+            if (currentSurface !== null && i > segmentStart) {
+              const fillColor = getSurfaceColor(currentSurface);
+              ctx.fillStyle = fillColor;
+              ctx.beginPath();
+              ctx.moveTo(points[segmentStart].x, points[segmentStart].y);
+              for (let j = segmentStart + 1; j < i; j++) {
+                ctx.lineTo(points[j].x, points[j].y);
+              }
+              ctx.lineTo(points[i - 1].x, padding.top + graphHeight);
+              ctx.lineTo(points[segmentStart].x, padding.top + graphHeight);
+              ctx.closePath();
+              ctx.fill();
+            }
+            
+            // Start new segment
+            currentSurface = surfaceValue;
+            segmentStart = i;
+          }
+        }
+        
+        // Fill final segment
+        if (currentSurface !== null && segmentStart < points.length) {
+          const fillColor = getSurfaceColor(currentSurface);
+          ctx.fillStyle = fillColor;
+          ctx.beginPath();
+          ctx.moveTo(points[segmentStart].x, points[segmentStart].y);
+          for (let j = segmentStart + 1; j < points.length; j++) {
+            ctx.lineTo(points[j].x, points[j].y);
+          }
+          ctx.lineTo(points[points.length - 1].x, padding.top + graphHeight);
+          ctx.lineTo(points[segmentStart].x, padding.top + graphHeight);
+          ctx.closePath();
+          ctx.fill();
+        }
       } else {
-        // Fallback: fill with default blue if no custom_present data
+        // Fallback: fill with default blue if no encoded value data
         ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
         ctx.lineTo(padding.left + graphWidth, padding.top + graphHeight);
         ctx.lineTo(padding.left, padding.top + graphHeight);
@@ -306,10 +353,40 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
   }
 }
 
+// Helper function to get color for surface value
+function getSurfaceColor(surfaceValue) {
+  if (!surfaceValue) return 'rgba(156, 163, 175, 0.3)'; // Gray for null/undefined
+  
+  const surfaceColors = {
+    'asphalt': 'rgba(34, 197, 94, 0.3)',      // Green
+    'concrete': 'rgba(249, 115, 22, 0.3)',     // Orange
+    'paved': 'rgba(59, 130, 246, 0.3)',       // Blue
+    'unpaved': 'rgba(168, 85, 247, 0.3)',     // Purple
+    'gravel': 'rgba(236, 72, 153, 0.3)',      // Pink
+    'dirt': 'rgba(120, 53, 15, 0.3)',         // Brown
+    'sand': 'rgba(234, 179, 8, 0.3)',         // Yellow
+    'grass': 'rgba(22, 163, 74, 0.3)',        // Dark green
+    'ground': 'rgba(120, 53, 15, 0.3)',       // Brown
+    'compacted': 'rgba(107, 114, 128, 0.3)',  // Gray
+    'fine_gravel': 'rgba(251, 146, 60, 0.3)', // Light orange
+    'pebblestone': 'rgba(168, 85, 247, 0.3)',  // Purple
+    'cobblestone': 'rgba(99, 102, 241, 0.3)', // Indigo
+    'wood': 'rgba(180, 83, 9, 0.3)',          // Dark orange
+    'metal': 'rgba(71, 85, 105, 0.3)',        // Slate
+    'sett': 'rgba(99, 102, 241, 0.3)',        // Indigo
+    'paving_stones': 'rgba(99, 102, 241, 0.3)' // Indigo
+  };
+  
+  const normalizedValue = String(surfaceValue).toLowerCase();
+  return surfaceColors[normalizedValue] || 'rgba(156, 163, 175, 0.3)'; // Default gray
+}
+
 function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordinates) {
   if (!canvas || !routeState.currentRouteData || !routeState.mapInstance || !coordinates || coordinates.length === 0) return;
   
   const { encodedValues } = routeState.currentRouteData;
+  const select = document.getElementById('heightgraph-encoded-select');
+  const selectedType = select ? select.value : 'custom_present';
   const padding = { top: 20, right: 20, bottom: 30, left: 50 };
   const graphWidth = canvas.width - padding.left - padding.right;
   const graphHeight = canvas.height - padding.top - padding.bottom;
@@ -417,21 +494,25 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
       tooltip.style.left = tooltipLeft + 'px';
       tooltip.style.top = tooltipTop + 'px';
       
-      // Build tooltip content - only show distance, custom_present, and elevation
+      // Build tooltip content - show distance, elevation, and selected encoded value
       let tooltipContent = `Distanz: ${(distance / 1000).toFixed(2)} km<br>`;
       
       if (elevation !== null && elevation !== undefined) {
         tooltipContent += `Höhe: ${Math.round(elevation)} m<br>`;
       }
       
-      // Add custom_present if available
-      if (encodedValues.custom_present && encodedValues.custom_present[dataIndex] !== undefined && 
+      // Add selected encoded value (custom_present or surface)
+      if (selectedType === 'custom_present' && encodedValues.custom_present && encodedValues.custom_present[dataIndex] !== undefined && 
           encodedValues.custom_present[dataIndex] !== null) {
         const customValue = encodedValues.custom_present[dataIndex];
         const customPresentText = typeof customValue === 'boolean' 
           ? (customValue ? 'Ja' : 'Nein') 
           : String(customValue);
         tooltipContent += `Custom Present: ${customPresentText}`;
+      } else if (selectedType === 'surface' && encodedValues.surface && encodedValues.surface[dataIndex] !== undefined && 
+                 encodedValues.surface[dataIndex] !== null) {
+        const surfaceValue = encodedValues.surface[dataIndex];
+        tooltipContent += `Surface: ${String(surfaceValue)}`;
       }
       
       tooltip.innerHTML = tooltipContent;
