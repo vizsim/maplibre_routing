@@ -459,7 +459,7 @@ function setupUIHandlers(map) {
   const calculateBtn = document.getElementById('calculate-route');
   const startInput = document.getElementById('start-input');
   const endInput = document.getElementById('end-input');
-  const closeBtn = document.getElementById('close-routing-panel');
+  const collapseBtn = document.getElementById('collapse-routing-panel');
   
   // Profile selection handlers
   document.querySelectorAll('.profile-btn').forEach(btn => {
@@ -483,12 +483,23 @@ function setupUIHandlers(map) {
   // Set initial route color
   updateRouteColor(map, selectedProfile);
   
-  // Close panel handler
-  if (closeBtn) {
-    closeBtn.addEventListener('click', () => {
+  // Collapse/expand panel handler
+  if (collapseBtn) {
+    collapseBtn.addEventListener('click', () => {
       const panel = document.querySelector('.routing-panel');
       if (panel) {
-        panel.style.display = 'none';
+        const isCollapsed = panel.classList.contains('collapsed');
+        if (isCollapsed) {
+          // Expand panel
+          panel.classList.remove('collapsed');
+          collapseBtn.textContent = '▼';
+          collapseBtn.title = 'Einklappen';
+        } else {
+          // Collapse panel
+          panel.classList.add('collapsed');
+          collapseBtn.textContent = '▶';
+          collapseBtn.title = 'Ausklappen';
+        }
       }
     });
   }
@@ -525,8 +536,19 @@ function setupUIHandlers(map) {
         const newOpacity = isHidden ? 0 : 0.8;
         map.setPaintProperty('route-layer', 'line-opacity', newOpacity);
         
-        // Update button text
-        hideBtn.textContent = isHidden ? 'Einblenden' : 'Ausblenden';
+        // Update button icon and title
+        const svg = hideBtn.querySelector('svg');
+        if (svg) {
+          if (isHidden) {
+            // Show eye-off icon (hidden)
+            svg.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>';
+            hideBtn.title = 'Einblenden';
+          } else {
+            // Show eye icon (visible)
+            svg.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
+            hideBtn.title = 'Ausblenden';
+          }
+        }
       }
     });
   }
@@ -537,7 +559,12 @@ function setupUIHandlers(map) {
       // Reset hide button state
       const hideBtn = document.getElementById('hide-route');
       if (hideBtn) {
-        hideBtn.textContent = 'Ausblenden';
+        const svg = hideBtn.querySelector('svg');
+        if (svg) {
+          // Reset to eye icon (visible)
+          svg.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
+          hideBtn.title = 'Ausblenden';
+        }
       }
     });
   }
