@@ -4,6 +4,38 @@ import { routeState } from './routeState.js';
 import { updateRouteColor } from './routeVisualization.js';
 import { getSurfaceColorRgba, getRoadClassColorRgba } from './colorSchemes.js';
 
+// Centralized configuration
+const HEIGHTGRAPH_CONFIG = {
+  canvas: {
+    defaultWidth: 320,
+    height: 150,
+    minWidth: 100
+  },
+  padding: {
+    top: 20,
+    right: 5,
+    bottom: 30,
+    left: 25
+  },
+  grid: {
+    steps: 5
+  },
+  colors: {
+    background: '#f9fafb',
+    grid: '#e5e7eb',
+    text: '#6b7280',
+    elevationLine: '#3b82f6',
+    indicatorLine: '#ef4444'
+  },
+  debounce: {
+    resize: 150
+  },
+  font: {
+    size: '10px',
+    family: 'sans-serif'
+  }
+};
+
 // Store event handlers to prevent duplicate listeners
 let heightgraphMouseMoveHandler = null;
 let heightgraphMouseLeaveHandler = null;
@@ -48,7 +80,7 @@ export function setupHeightgraphHandlers() {
         // Update stats
         updateHeightgraphStats(currentType, encodedValues || {});
       }
-    }, 150);
+    }, HEIGHTGRAPH_CONFIG.debounce.resize);
   };
   
   window.addEventListener('resize', heightgraphResizeHandler);
@@ -99,12 +131,46 @@ export function cleanupHeightgraphHandlers() {
   }
 }
 
-export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, coordinates = [], skipInteractivity = false) {
-  const container = document.getElementById('heightgraph-container');
-  const canvas = document.getElementById('heightgraph-canvas');
-  const select = document.getElementById('heightgraph-encoded-select');
+// Validate heightgraph data for consistency
+function validateHeightgraphData(elevations, coordinates, encodedValues) {
+  const errors = [];
   
-  if (!container || !canvas) return;
+  if (elevations.length > 0 && coordinates.length > 0 && elevations.length !== coordinates.length) {
+    errors.push(`Elevation count (${elevations.length}) doesn't match coordinates (${coordinates.length})`);
+  }
+  
+  if (encodedValues) {
+    Object.keys(encodedValues).forEach(key => {
+      const values = encodedValues[key];
+      if (Array.isArray(values) && coordinates.length > 0 && values.length !== coordinates.length) {
+        errors.push(`Encoded value '${key}' length (${values.length}) doesn't match coordinates (${coordinates.length})`);
+      }
+    });
+  }
+  
+  if (errors.length > 0) {
+    console.warn('Heightgraph data validation errors:', errors);
+    // Don't throw - just warn, as the graph can still be drawn with partial data
+  }
+  
+  return errors.length === 0;
+}
+
+export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, coordinates = [], skipInteractivity = false) {
+  // Cache DOM elements
+  const elements = {
+    container: document.getElementById('heightgraph-container'),
+    canvas: document.getElementById('heightgraph-canvas'),
+    indicatorCanvas: document.getElementById('heightgraph-indicator-canvas'),
+    select: document.getElementById('heightgraph-encoded-select')
+  };
+  
+  if (!elements.container || !elements.canvas) return;
+  
+  // Validate data consistency
+  validateHeightgraphData(elevations, coordinates, encodedValues);
+  
+  const { container, canvas, indicatorCanvas, select } = elements;
   
   // Clear indicator line tracking when redrawing
   if (canvas.lastIndicatorX !== undefined) {
@@ -162,9 +228,9 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
   
   // Set canvas size - use more of the available width
   // Ensure width doesn't exceed container width to prevent overflow
-  const maxWidth = container.clientWidth || 320; // Fallback to 320 if clientWidth is 0
-  const width = Math.max(100, maxWidth); // Minimum 100px width
-  const height = 150;
+  const maxWidth = container.clientWidth || HEIGHTGRAPH_CONFIG.canvas.defaultWidth;
+  const width = Math.max(HEIGHTGRAPH_CONFIG.canvas.minWidth, maxWidth);
+  const height = HEIGHTGRAPH_CONFIG.canvas.height;
   canvas.width = width;
   canvas.height = height;
   // Ensure CSS size matches actual canvas size to avoid scaling issues
@@ -207,8 +273,8 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
     valueRange = maxValue - minValue || 1;
   }
   
-  // Padding - minimal padding to maximize chart width
-  const padding = { top: 20, right: 5, bottom: 30, left: 25 };
+  // Use centralized padding configuration
+  const padding = HEIGHTGRAPH_CONFIG.padding;
   const graphWidth = width - padding.left - padding.right;
   const graphHeight = height - padding.top - padding.bottom;
   
@@ -217,16 +283,130 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
   const stepX = dataLength > 1 ? graphWidth / (dataLength - 1) : 0;
   
   // Draw background
-  ctx.fillStyle = '#f9fafb';
-  ctx.fillRect(padding.left, padding.top, graphWidth, graphHeight);
+  drawBackground(ctx, padding, graphWidth, graphHeight);
   
-  // Draw grid lines
-  ctx.strokeStyle = '#e5e7eb';
+  // Draw grid lines and Y-axis labels
+  drawGrid(ctx, padding, graphWidth, graphHeight, baseData);
+  
+  // Calculate cumulative distances for each point (for accurate X-axis positioning)
+  // This ensures the graph matches the actual route distance, not just point count
+  let cumulativeDistances = [];
+  let actualTotalDistance = totalDistance;
+  
+  if (coordinates.length > 0) {
+    const result = calculateCumulativeDistances(coordinates);
+    cumulativeDistances = result.distances;
+    actualTotalDistance = result.total;
+  } else {
+    // Fallback: use index-based if no coordinates
+    for (let i = 0; i < baseData.length; i++) {
+      cumulativeDistances.push((i / (baseData.length - 1)) * totalDistance);
+    }
+  }
+  
+  // Always draw base elevation profile first
+  if (baseData.length > 0) {
+    const baseValid = baseData.filter(v => v !== null && v !== undefined);
+    if (baseValid.length > 0) {
+      const baseMin = Math.min(...baseValid);
+      const baseMax = Math.max(...baseValid);
+      const baseRange = baseMax - baseMin || 1;
+      
+      // Store points for area filling
+      const points = [];
+      
+      baseData.forEach((value, index) => {
+        if (value === null || value === undefined) return;
+        
+        // Calculate X position based on cumulative distance, not index
+        // Use actualTotalDistance to ensure 100% matches the end of the route
+        const distanceRatio = actualTotalDistance > 0 && cumulativeDistances[index] !== undefined
+          ? cumulativeDistances[index] / actualTotalDistance
+          : index / (baseData.length - 1);
+        const x = padding.left + graphWidth * distanceRatio;
+        
+        const normalized = (value - baseMin) / baseRange;
+        const y = padding.top + graphHeight - (normalized * graphHeight);
+        
+        points.push({ x, y, index });
+      });
+      
+      // Draw elevation line
+      drawElevationLine(ctx, points);
+      
+      // Fill area under elevation curve based on selected encoded value
+      const selectedType = select ? select.value : 'custom_present';
+      
+      // Use generic fillSegmentsByValue function for all encoded value types
+      if (selectedType === 'custom_present' && encodedValues.custom_present && encodedValues.custom_present.length > 0 && points.length > 0) {
+        // Custom color function for custom_present (boolean-like values)
+        const getCustomPresentColor = (value) => {
+          const isTrue = value === true || value === 'True' || value === 'true';
+          return isTrue ? 'rgba(59, 130, 246, 0.3)' : 'rgba(236, 72, 153, 0.3)';
+        };
+        fillSegmentsByValue(ctx, points, encodedValues.custom_present, getCustomPresentColor, padding, graphHeight);
+      } else if (selectedType === 'surface' && encodedValues.surface && encodedValues.surface.length > 0 && points.length > 0) {
+        fillSegmentsByValue(ctx, points, encodedValues.surface, getSurfaceColor, padding, graphHeight);
+      } else if (selectedType === 'road_class' && encodedValues.road_class && encodedValues.road_class.length > 0 && points.length > 0) {
+        fillSegmentsByValue(ctx, points, encodedValues.road_class, getRoadClassColor, padding, graphHeight);
+      } else {
+        // Fallback: fill with default blue if no encoded value data
+        // Note: This requires the elevation line path to still be active
+        // If no encoded values, just skip the fill (elevation line is already drawn)
+      }
+    }
+  }
+  
+  // Draw distance labels on x-axis
+  drawXAxisLabels(ctx, padding, graphWidth, graphHeight, actualTotalDistance, height);
+  
+  // Setup interactive hover (only if not skipped)
+  if (!skipInteractivity) {
+    // Also setup indicator canvas
+    if (indicatorCanvas) {
+      indicatorCanvas.width = canvas.width;
+      indicatorCanvas.height = canvas.height;
+      // Ensure CSS size matches actual canvas size to avoid scaling issues
+      indicatorCanvas.style.width = canvas.width + 'px';
+      indicatorCanvas.style.height = canvas.height + 'px';
+    }
+    setupHeightgraphInteractivity(canvas, baseData, actualTotalDistance, coordinates, cumulativeDistances);
+  }
+  
+  // Update stats
+  const statsSelectedType = select ? select.value : 'custom_present';
+  updateHeightgraphStats(statsSelectedType, encodedValues);
+}
+
+// Helper function to calculate distance between two coordinates (Haversine formula)
+function calculateDistance(coord1, coord2) {
+  const R = 6371000; // Earth radius in meters
+  const lat1 = coord1[1] * Math.PI / 180;
+  const lat2 = coord2[1] * Math.PI / 180;
+  const deltaLat = (coord2[1] - coord1[1]) * Math.PI / 180;
+  const deltaLon = (coord2[0] - coord1[0]) * Math.PI / 180;
+  
+  const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+            Math.cos(lat1) * Math.cos(lat2) *
+            Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  
+  return R * c;
+}
+
+// Draw background rectangle
+function drawBackground(ctx, padding, graphWidth, graphHeight) {
+  ctx.fillStyle = HEIGHTGRAPH_CONFIG.colors.background;
+  ctx.fillRect(padding.left, padding.top, graphWidth, graphHeight);
+}
+
+// Draw grid lines and Y-axis labels
+function drawGrid(ctx, padding, graphWidth, graphHeight, baseData) {
+  ctx.strokeStyle = HEIGHTGRAPH_CONFIG.colors.grid;
   ctx.lineWidth = 1;
   
-  // Horizontal grid lines
   // Y-axis always shows elevation data (baseData), regardless of selectedType
-  const gridSteps = 5;
+  const gridSteps = HEIGHTGRAPH_CONFIG.grid.steps;
   const yLabels = new Set(); // Track Y-axis labels to avoid duplicates
   
   // Calculate elevation range for Y-axis labels
@@ -257,260 +437,46 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
     // Only draw label if it's not a duplicate
     if (!yLabels.has(labelText)) {
       yLabels.add(labelText);
-      ctx.fillStyle = '#6b7280';
-      ctx.font = '10px sans-serif';
+      ctx.fillStyle = HEIGHTGRAPH_CONFIG.colors.text;
+      ctx.font = `${HEIGHTGRAPH_CONFIG.font.size} ${HEIGHTGRAPH_CONFIG.font.family}`;
       ctx.textAlign = 'right';
       ctx.fillText(labelText, padding.left - 3, y + 3);
     }
   }
+}
+
+// Draw elevation line
+function drawElevationLine(ctx, points) {
+  if (points.length === 0) return;
   
-  // Calculate cumulative distances for each point (for accurate X-axis positioning)
-  // This ensures the graph matches the actual route distance, not just point count
-  const cumulativeDistances = [];
-  let actualTotalDistance = totalDistance; // Will be updated with actual calculated distance
+  ctx.strokeStyle = HEIGHTGRAPH_CONFIG.colors.elevationLine;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
   
-  if (coordinates.length > 0) {
-    let cumulativeDist = 0;
-    cumulativeDistances.push(0); // Start at 0
-    
-    for (let i = 1; i < coordinates.length; i++) {
-      const segmentDist = calculateDistance(coordinates[i - 1], coordinates[i]);
-      cumulativeDist += segmentDist;
-      cumulativeDistances.push(cumulativeDist);
+  points.forEach((point, index) => {
+    if (index === 0) {
+      ctx.moveTo(point.x, point.y);
+    } else {
+      ctx.lineTo(point.x, point.y);
     }
-    
-    // Use the actual calculated cumulative distance as the total
-    // This ensures the graph goes from 0% to 100% correctly
-    actualTotalDistance = cumulativeDist;
-  } else {
-    // Fallback: use index-based if no coordinates
-    for (let i = 0; i < baseData.length; i++) {
-      cumulativeDistances.push((i / (baseData.length - 1)) * totalDistance);
-    }
-  }
+  });
   
-  // Always draw base elevation profile first
-  if (baseData.length > 0) {
-    const baseValid = baseData.filter(v => v !== null && v !== undefined);
-    if (baseValid.length > 0) {
-      const baseMin = Math.min(...baseValid);
-      const baseMax = Math.max(...baseValid);
-      const baseRange = baseMax - baseMin || 1;
-      
-      ctx.strokeStyle = '#3b82f6';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      
-      // Store points for area filling
-      const points = [];
-      
-      baseData.forEach((value, index) => {
-        if (value === null || value === undefined) return;
-        
-        // Calculate X position based on cumulative distance, not index
-        // Use actualTotalDistance to ensure 100% matches the end of the route
-        const distanceRatio = actualTotalDistance > 0 && cumulativeDistances[index] !== undefined
-          ? cumulativeDistances[index] / actualTotalDistance
-          : index / (baseData.length - 1);
-        const x = padding.left + graphWidth * distanceRatio;
-        
-        const normalized = (value - baseMin) / baseRange;
-        const y = padding.top + graphHeight - (normalized * graphHeight);
-        
-        points.push({ x, y, index });
-        
-        if (index === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-      });
-      
-      ctx.stroke();
-      
-      // Fill area under elevation curve based on selected encoded value
-      const selectedType = select ? select.value : 'custom_present';
-      
-      if (selectedType === 'custom_present' && encodedValues.custom_present && encodedValues.custom_present.length > 0 && points.length > 0) {
-        // Fill segment by segment based on custom_present
-        // Group consecutive segments with the same value to avoid gaps
-        let currentValue = null;
-        let segmentStart = 0;
-        
-        for (let i = 0; i < points.length; i++) {
-          const customValue = encodedValues.custom_present[points[i].index];
-          const isCustomPresent = customValue === true || customValue === 'True' || customValue === 'true';
-          
-          if (isCustomPresent !== currentValue) {
-            // Fill previous segment if exists
-            if (currentValue !== null && i > segmentStart) {
-              const fillColor = currentValue 
-                ? 'rgba(59, 130, 246, 0.3)'  // Blue for true
-                : 'rgba(236, 72, 153, 0.3)'; // Pink/rosa for false
-              
-              ctx.fillStyle = fillColor;
-              ctx.beginPath();
-              ctx.moveTo(points[segmentStart].x, points[segmentStart].y);
-              for (let j = segmentStart + 1; j < i; j++) {
-                ctx.lineTo(points[j].x, points[j].y);
-              }
-              // Include the transition point to avoid gaps
-              if (i < points.length) {
-                ctx.lineTo(points[i].x, points[i].y);
-              }
-              ctx.lineTo(points[i < points.length ? i : i - 1].x, padding.top + graphHeight);
-              ctx.lineTo(points[segmentStart].x, padding.top + graphHeight);
-              ctx.closePath();
-              ctx.fill();
-            }
-            
-            // Start new segment
-            currentValue = isCustomPresent;
-            segmentStart = i;
-          }
-        }
-        
-        // Fill final segment
-        if (currentValue !== null && segmentStart < points.length) {
-          const fillColor = currentValue 
-            ? 'rgba(59, 130, 246, 0.3)'  // Blue for true
-            : 'rgba(236, 72, 153, 0.3)'; // Pink/rosa for false
-          
-          ctx.fillStyle = fillColor;
-          ctx.beginPath();
-          ctx.moveTo(points[segmentStart].x, points[segmentStart].y);
-          for (let j = segmentStart + 1; j < points.length; j++) {
-            ctx.lineTo(points[j].x, points[j].y);
-          }
-          ctx.lineTo(points[points.length - 1].x, padding.top + graphHeight);
-          ctx.lineTo(points[segmentStart].x, padding.top + graphHeight);
-          ctx.closePath();
-          ctx.fill();
-        }
-      } else if (selectedType === 'surface' && encodedValues.surface && encodedValues.surface.length > 0 && points.length > 0) {
-        // Fill segment by segment based on surface
-        // Group consecutive segments with the same surface value
-        let currentSurface = null;
-        let segmentStart = 0;
-        
-        for (let i = 0; i < points.length; i++) {
-          const surfaceValue = encodedValues.surface[points[i].index];
-          
-          if (surfaceValue !== currentSurface) {
-            // Fill previous segment if exists
-            if (currentSurface !== null && i > segmentStart) {
-              const fillColor = getSurfaceColor(currentSurface);
-              ctx.fillStyle = fillColor;
-              ctx.beginPath();
-              ctx.moveTo(points[segmentStart].x, points[segmentStart].y);
-              for (let j = segmentStart + 1; j < i; j++) {
-                ctx.lineTo(points[j].x, points[j].y);
-              }
-              // Include the transition point to avoid gaps
-              if (i < points.length) {
-                ctx.lineTo(points[i].x, points[i].y);
-              }
-              ctx.lineTo(points[i < points.length ? i : i - 1].x, padding.top + graphHeight);
-              ctx.lineTo(points[segmentStart].x, padding.top + graphHeight);
-              ctx.closePath();
-              ctx.fill();
-            }
-            
-            // Start new segment
-            currentSurface = surfaceValue;
-            segmentStart = i;
-          }
-        }
-        
-        // Fill final segment
-        if (currentSurface !== null && segmentStart < points.length) {
-          const fillColor = getSurfaceColor(currentSurface);
-          ctx.fillStyle = fillColor;
-          ctx.beginPath();
-          ctx.moveTo(points[segmentStart].x, points[segmentStart].y);
-          for (let j = segmentStart + 1; j < points.length; j++) {
-            ctx.lineTo(points[j].x, points[j].y);
-          }
-          ctx.lineTo(points[points.length - 1].x, padding.top + graphHeight);
-          ctx.lineTo(points[segmentStart].x, padding.top + graphHeight);
-          ctx.closePath();
-          ctx.fill();
-        }
-      } else if (selectedType === 'road_class' && encodedValues.road_class && encodedValues.road_class.length > 0 && points.length > 0) {
-        // Fill segment by segment based on road_class
-        // Group consecutive segments with the same road_class value
-        let currentRoadClass = null;
-        let segmentStart = 0;
-        
-        for (let i = 0; i < points.length; i++) {
-          const roadClassValue = encodedValues.road_class[points[i].index];
-          
-          if (roadClassValue !== currentRoadClass) {
-            // Fill previous segment if exists
-            if (currentRoadClass !== null && i > segmentStart) {
-              const fillColor = getRoadClassColor(currentRoadClass);
-              ctx.fillStyle = fillColor;
-              ctx.beginPath();
-              ctx.moveTo(points[segmentStart].x, points[segmentStart].y);
-              for (let j = segmentStart + 1; j < i; j++) {
-                ctx.lineTo(points[j].x, points[j].y);
-              }
-              // Include the transition point to avoid gaps
-              if (i < points.length) {
-                ctx.lineTo(points[i].x, points[i].y);
-              }
-              ctx.lineTo(points[i < points.length ? i : i - 1].x, padding.top + graphHeight);
-              ctx.lineTo(points[segmentStart].x, padding.top + graphHeight);
-              ctx.closePath();
-              ctx.fill();
-            }
-            
-            // Start new segment
-            currentRoadClass = roadClassValue;
-            segmentStart = i;
-          }
-        }
-        
-        // Fill final segment
-        if (currentRoadClass !== null && segmentStart < points.length) {
-          const fillColor = getRoadClassColor(currentRoadClass);
-          ctx.fillStyle = fillColor;
-          ctx.beginPath();
-          ctx.moveTo(points[segmentStart].x, points[segmentStart].y);
-          for (let j = segmentStart + 1; j < points.length; j++) {
-            ctx.lineTo(points[j].x, points[j].y);
-          }
-          ctx.lineTo(points[points.length - 1].x, padding.top + graphHeight);
-          ctx.lineTo(points[segmentStart].x, padding.top + graphHeight);
-          ctx.closePath();
-          ctx.fill();
-        }
-      } else {
-        // Fallback: fill with default blue if no encoded value data
-        ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
-        ctx.lineTo(padding.left + graphWidth, padding.top + graphHeight);
-        ctx.lineTo(padding.left, padding.top + graphHeight);
-        ctx.closePath();
-        ctx.fill();
-      }
-    }
-  }
-  
-  // Draw distance labels on x-axis with dynamic step size based on actual total distance
-  ctx.fillStyle = '#6b7280';
-  ctx.font = '10px sans-serif';
+  ctx.stroke();
+}
+
+// Draw X-axis distance labels
+function drawXAxisLabels(ctx, padding, graphWidth, graphHeight, actualTotalDistance, height) {
+  ctx.fillStyle = HEIGHTGRAPH_CONFIG.colors.text;
+  ctx.font = `${HEIGHTGRAPH_CONFIG.font.size} ${HEIGHTGRAPH_CONFIG.font.family}`;
   ctx.textAlign = 'center';
   
-  // Use actualTotalDistance instead of totalDistance for accurate X-axis labels
   const totalDistanceKm = actualTotalDistance / 1000;
   const maxTicks = 8; // Maximum number of ticks to avoid overcrowding
   
   // Determine appropriate step size based on total distance
-  // Try different step sizes and pick one that gives reasonable number of ticks
   let stepSize;
   let useHalfSteps = false;
   
-  // Try step sizes in order: 0.5, 1, 2, 5, 10, 20, 50, ...
   const possibleStepSizes = [0.5, 1, 2, 5, 10, 20, 50, 100];
   
   for (const candidateStepSize of possibleStepSizes) {
@@ -525,13 +491,11 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
   // Generate ticks based on step size
   const ticks = [];
   if (useHalfSteps) {
-    // For 0.5 km steps: 0.5, 1.0, 1.5, 2.0, ...
     for (let distance = stepSize; distance <= totalDistanceKm; distance += stepSize) {
       const roundedDistance = Math.round(distance * 10) / 10;
       ticks.push(roundedDistance);
     }
   } else {
-    // For whole number steps: 1, 2, 3, ... or 2, 4, 6, ... or 5, 10, 15, ...
     for (let distance = stepSize; distance <= totalDistanceKm; distance += stepSize) {
       ticks.push(distance);
     }
@@ -539,51 +503,93 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
   
   // Draw ticks
   for (const distance of ticks) {
-    // Calculate x position based on distance ratio to total distance
     const distanceRatio = totalDistanceKm > 0 ? distance / totalDistanceKm : 0;
     const x = padding.left + graphWidth * distanceRatio;
     
-    // Only draw if within bounds
     if (x >= padding.left && x <= padding.left + graphWidth) {
-      // Format: show whole numbers without .0, decimals with .1
       const labelText = (distance % 1 === 0 ? distance.toFixed(0) : distance.toFixed(1)) + ' km';
       ctx.fillText(labelText, x, height - 5);
     }
   }
-  
-  // Setup interactive hover (only if not skipped)
-  if (!skipInteractivity) {
-    // Also setup indicator canvas
-    const indicatorCanvas = document.getElementById('heightgraph-indicator-canvas');
-    if (indicatorCanvas) {
-      indicatorCanvas.width = canvas.width;
-      indicatorCanvas.height = canvas.height;
-      // Ensure CSS size matches actual canvas size to avoid scaling issues
-      indicatorCanvas.style.width = canvas.width + 'px';
-      indicatorCanvas.style.height = canvas.height + 'px';
-    }
-    setupHeightgraphInteractivity(canvas, baseData, actualTotalDistance, coordinates, cumulativeDistances);
-  }
-  
-  // Update stats
-  const statsSelectedType = select ? select.value : 'custom_present';
-  updateHeightgraphStats(statsSelectedType, encodedValues);
 }
 
-// Helper function to calculate distance between two coordinates (Haversine formula)
-function calculateDistance(coord1, coord2) {
-  const R = 6371000; // Earth radius in meters
-  const lat1 = coord1[1] * Math.PI / 180;
-  const lat2 = coord2[1] * Math.PI / 180;
-  const deltaLat = (coord2[1] - coord1[1]) * Math.PI / 180;
-  const deltaLon = (coord2[0] - coord1[0]) * Math.PI / 180;
+// Calculate cumulative distances for all coordinates
+// Returns { distances: number[], total: number }
+function calculateCumulativeDistances(coordinates) {
+  if (!coordinates || coordinates.length === 0) {
+    return { distances: [], total: 0 };
+  }
   
-  const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-            Math.cos(lat1) * Math.cos(lat2) *
-            Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distances = [0];
+  let total = 0;
   
-  return R * c;
+  for (let i = 1; i < coordinates.length; i++) {
+    const segmentDist = calculateDistance(coordinates[i - 1], coordinates[i]);
+    total += segmentDist;
+    distances.push(total);
+  }
+  
+  return { distances, total };
+}
+
+// Fill a single segment under the elevation curve
+function fillSegment(ctx, points, startIdx, endIdx, color, padding, graphHeight) {
+  if (startIdx >= endIdx || startIdx < 0 || endIdx > points.length) return;
+  
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(points[startIdx].x, points[startIdx].y);
+  
+  // Draw the top edge of the segment (along the elevation curve)
+  for (let j = startIdx + 1; j < endIdx; j++) {
+    ctx.lineTo(points[j].x, points[j].y);
+  }
+  
+  // Include the transition point to avoid gaps
+  if (endIdx < points.length) {
+    ctx.lineTo(points[endIdx].x, points[endIdx].y);
+  }
+  
+  // Draw down to the bottom
+  const lastPoint = endIdx < points.length ? points[endIdx] : points[endIdx - 1];
+  ctx.lineTo(lastPoint.x, padding.top + graphHeight);
+  
+  // Draw along the bottom
+  ctx.lineTo(points[startIdx].x, padding.top + graphHeight);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// Fill segments based on encoded values
+// Generic function that works for custom_present, surface, road_class, etc.
+function fillSegmentsByValue(ctx, points, values, getColor, padding, graphHeight) {
+  if (!points || points.length === 0 || !values || values.length === 0) return;
+  
+  let currentValue = null;
+  let segmentStart = 0;
+  
+  for (let i = 0; i < points.length; i++) {
+    const value = values[points[i].index];
+    
+    // Check if value changed or is first point
+    if (value !== currentValue || i === 0) {
+      // Fill previous segment if exists
+      if (currentValue !== null && i > segmentStart) {
+        const fillColor = getColor(currentValue);
+        fillSegment(ctx, points, segmentStart, i, fillColor, padding, graphHeight);
+      }
+      
+      // Start new segment
+      currentValue = value;
+      segmentStart = i;
+    }
+  }
+  
+  // Fill final segment
+  if (currentValue !== null && segmentStart < points.length) {
+    const fillColor = getColor(currentValue);
+    fillSegment(ctx, points, segmentStart, points.length, fillColor, padding, graphHeight);
+  }
 }
 
 // Calculate and display statistics for the selected encoded value
@@ -701,7 +707,7 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
   const select = document.getElementById('heightgraph-encoded-select');
   const selectedType = select ? select.value : 'custom_present';
   // Use same padding values as in drawHeightgraph
-  const padding = { top: 20, right: 5, bottom: 30, left: 25 };
+  const padding = HEIGHTGRAPH_CONFIG.padding;
   
   // CRITICAL: Use getBoundingClientRect() to get the ACTUAL rendered size, not canvas.width
   // canvas.width is the internal resolution, but CSS might scale it down
@@ -718,16 +724,9 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
   let actualTotalDistance = totalDistance;
   
   if (!computedCumulativeDistances && coordinates.length > 0) {
-    computedCumulativeDistances = [];
-    let cumulativeDist = 0;
-    computedCumulativeDistances.push(0);
-    for (let i = 1; i < coordinates.length; i++) {
-      const segmentDist = calculateDistance(coordinates[i - 1], coordinates[i]);
-      cumulativeDist += segmentDist;
-      computedCumulativeDistances.push(cumulativeDist);
-    }
-    // Update actualTotalDistance to match calculated distance
-    actualTotalDistance = cumulativeDist;
+    const result = calculateCumulativeDistances(coordinates);
+    computedCumulativeDistances = result.distances;
+    actualTotalDistance = result.total;
   } else if (computedCumulativeDistances && computedCumulativeDistances.length > 0) {
     // Use the last cumulative distance as the actual total
     actualTotalDistance = computedCumulativeDistances[computedCumulativeDistances.length - 1];
@@ -947,7 +946,7 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
           const indicatorX = padding.left + (clampedRelativeX * actualGraphWidth);
           
           // Draw new indicator line at calculated position
-          indicatorCtx.strokeStyle = '#ef4444';
+          indicatorCtx.strokeStyle = HEIGHTGRAPH_CONFIG.colors.indicatorLine;
           indicatorCtx.lineWidth = 2;
           indicatorCtx.beginPath();
           indicatorCtx.moveTo(indicatorX, padding.top);
@@ -957,7 +956,7 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
           // Fallback: draw on main canvas if indicator canvas not available
           const ctx = canvas.getContext('2d');
           const indicatorX = padding.left + (clampedRelativeX * actualGraphWidth);
-          ctx.strokeStyle = '#ef4444';
+          ctx.strokeStyle = HEIGHTGRAPH_CONFIG.colors.indicatorLine;
           ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.moveTo(indicatorX, padding.top);
