@@ -664,10 +664,8 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         });
 
-        // Show/hide legend
-        if (missingStreetsLegend) {
-          missingStreetsLegend.style.display = e.target.checked ? 'flex' : 'none';
-        }
+        // Legend is always visible, but layer visibility is controlled by checkbox
+        // Legend display is not changed here - it stays visible
       }
     });
   }
@@ -689,45 +687,109 @@ document.addEventListener('DOMContentLoaded', () => {
   const contextPanel = document.querySelector('.context-panel');
   
   if (routingPanel && contextPanel) {
+    let isUpdating = false; // Flag to prevent infinite loops
+    let updateTimeout = null;
+    
     const updateContextPanelPosition = () => {
+      // Prevent recursive calls
+      if (isUpdating) return;
+      isUpdating = true;
+      
+      // Clear any pending timeout
+      if (updateTimeout) {
+        clearTimeout(updateTimeout);
+      }
+      
       // Force a reflow to get accurate measurements
       contextPanel.style.display = 'block';
       
+      // Temporarily remove max-height from routing panel to get natural height
+      routingPanel.style.maxHeight = 'none';
+      
+      // Force reflow
+      void routingPanel.offsetHeight;
+      
       const routingRect = routingPanel.getBoundingClientRect();
-      const routingBottom = routingRect.bottom;
       const viewportHeight = window.innerHeight;
       const padding = 10;
-      const maxBottom = viewportHeight - padding;
       
-      // Calculate available space - ensure context panel gets remaining 30% of viewport
-      const routingMaxHeight = viewportHeight * 0.7;
-      const contextMaxHeight = viewportHeight * 0.3 - padding;
-      const routingActualHeight = Math.min(routingRect.height, routingMaxHeight);
-      const routingBottomCalculated = routingRect.top + routingActualHeight;
+      // Calculate available space
+      const routingNaturalHeight = routingRect.height;
+      const routingMaxHeight = viewportHeight * 0.7; // Max 70% when space is limited
+      const contextMaxHeight = viewportHeight * 0.3; // Max 30% when space is limited
       
-      // Position context panel below routing panel
-      contextPanel.style.top = `${routingBottomCalculated + padding}px`;
-      contextPanel.style.maxHeight = `${contextMaxHeight}px`;
-      contextPanel.style.overflowY = 'auto';
-      contextPanel.style.bottom = 'auto';
+      // Check if both panels fit in their natural size
+      const totalNeededHeight = routingNaturalHeight + contextPanel.scrollHeight + padding * 2;
+      const availableViewportHeight = viewportHeight - padding * 2;
+      
+      let routingActualMaxHeight, contextActualMaxHeight;
+      
+      if (totalNeededHeight <= availableViewportHeight) {
+        // Enough space: both panels get their natural size
+        routingActualMaxHeight = 'none'; // No limit, use natural height
+        contextActualMaxHeight = availableViewportHeight - routingNaturalHeight - padding;
+      } else {
+        // Not enough space: apply limits (routing max 70%, context max 30%)
+        routingActualMaxHeight = `${routingMaxHeight}px`; // Set to 70% of viewport
+        contextActualMaxHeight = Math.min(contextMaxHeight, availableViewportHeight - routingMaxHeight - padding);
+      }
+      
+      // Apply max-height to routing panel (only if it changed)
+      if (routingPanel.style.maxHeight !== routingActualMaxHeight) {
+        routingPanel.style.maxHeight = routingActualMaxHeight;
+      }
+      
+      // Use requestAnimationFrame for smoother updates
+      requestAnimationFrame(() => {
+        const updatedRoutingRect = routingPanel.getBoundingClientRect();
+        const routingBottomCalculated = updatedRoutingRect.top + updatedRoutingRect.height;
+        
+        // Position context panel below routing panel
+        contextPanel.style.top = `${routingBottomCalculated + padding}px`;
+        contextPanel.style.maxHeight = `${Math.max(contextActualMaxHeight, 100)}px`; // Minimum 100px
+        contextPanel.style.overflowY = 'auto';
+        contextPanel.style.bottom = 'auto';
+        
+        // Reset flag after a short delay to allow for any pending updates
+        updateTimeout = setTimeout(() => {
+          isUpdating = false;
+        }, 50);
+      });
+    };
+    
+    // Debounced version for observer
+    const debouncedUpdate = () => {
+      if (updateTimeout) {
+        clearTimeout(updateTimeout);
+      }
+      updateTimeout = setTimeout(() => {
+        updateContextPanelPosition();
+      }, 100);
     };
     
     // Update on load
     setTimeout(updateContextPanelPosition, 100);
     
-    // Update on window resize
-    window.addEventListener('resize', updateContextPanelPosition);
+    // Update on window resize (debounced)
+    let resizeTimeout = null;
+    window.addEventListener('resize', () => {
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(updateContextPanelPosition, 150);
+    });
     
     // Update when routing panel content changes (e.g., route calculated, heightgraph shown)
+    // Only observe childList and class changes, not style (to avoid loops)
     const observer = new MutationObserver(() => {
-      updateContextPanelPosition();
+      if (!isUpdating) {
+        debouncedUpdate();
+      }
     });
     
     observer.observe(routingPanel, {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['class', 'style']
+      attributeFilter: ['class'] // Don't observe 'style' to avoid loops
     });
     
     // Also update when route info changes (heightgraph appears/disappears)
@@ -738,7 +800,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const heightgraphContainer = document.getElementById('heightgraph-container');
     if (heightgraphContainer) {
-      observer.observe(heightgraphContainer, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
+      observer.observe(heightgraphContainer, { 
+        childList: true, 
+        subtree: true, 
+        attributes: true, 
+        attributeFilter: ['style'] 
+      });
     }
   }
 });
