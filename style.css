@@ -810,6 +810,10 @@ code {
   background: #e5e7eb;
 }
 
+#hide-route {
+  min-width: 110px;
+}
+
 .route-info {
   margin-top: 12px;
   padding: 0;

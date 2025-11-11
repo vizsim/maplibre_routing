@@ -137,6 +137,18 @@ export function setupRouting(map) {
 
   setupUIHandlers(map);
   setupHeightgraphHandlers();
+  
+  // Automatically activate start point selection mode on map load
+  isSelectingStart = true;
+  if (map.getCanvas()) {
+    map.getCanvas().style.cursor = 'crosshair';
+  }
+  
+  // Mark start button as active
+  const startBtn = document.getElementById('set-start');
+  if (startBtn) {
+    startBtn.classList.add('active');
+  }
 }
 
 function setupHeightgraphHandlers() {
@@ -501,9 +513,32 @@ function setupUIHandlers(map) {
     });
   }
 
+  // Hide route button
+  const hideBtn = document.getElementById('hide-route');
+  if (hideBtn) {
+    let isHidden = false;
+    hideBtn.addEventListener('click', () => {
+      isHidden = !isHidden;
+      
+      // Toggle route layer opacity
+      if (map.getLayer('route-layer')) {
+        const newOpacity = isHidden ? 0 : 0.8;
+        map.setPaintProperty('route-layer', 'line-opacity', newOpacity);
+        
+        // Update button text
+        hideBtn.textContent = isHidden ? 'Einblenden' : 'Ausblenden';
+      }
+    });
+  }
+  
   if (clearBtn) {
     clearBtn.addEventListener('click', () => {
       clearRoute(map);
+      // Reset hide button state
+      const hideBtn = document.getElementById('hide-route');
+      if (hideBtn) {
+        hideBtn.textContent = 'Ausblenden';
+      }
     });
   }
 
@@ -522,8 +557,12 @@ function setupUIHandlers(map) {
     if (isSelectingStart) {
       setStartPoint(map, e.lngLat);
       isSelectingStart = false;
-      map.getCanvas().style.cursor = '';
       if (startBtn) startBtn.classList.remove('active');
+      
+      // Automatically activate end point selection mode
+      isSelectingEnd = true;
+      map.getCanvas().style.cursor = 'crosshair';
+      if (endBtn) endBtn.classList.add('active');
     } else if (isSelectingEnd) {
       setEndPoint(map, e.lngLat);
       isSelectingEnd = false;
@@ -541,6 +580,13 @@ function setupUIHandlers(map) {
         if (coords) {
           setStartPoint(map, { lng: coords.lng, lat: coords.lat });
           map.flyTo({ center: [coords.lng, coords.lat], zoom: 14 });
+          
+          // Automatically activate end point selection mode
+          isSelectingStart = false;
+          isSelectingEnd = true;
+          map.getCanvas().style.cursor = 'crosshair';
+          if (startBtn) startBtn.classList.remove('active');
+          if (endBtn) endBtn.classList.add('active');
         }
       }
     });
@@ -1344,7 +1390,24 @@ function drawHeightgraph(elevations, totalDistance, encodedValues = {}, coordina
   ctx.lineWidth = 1;
   
   // Horizontal grid lines
+  // Y-axis always shows elevation data (baseData), regardless of selectedType
   const gridSteps = 5;
+  const yLabels = new Set(); // Track Y-axis labels to avoid duplicates
+  
+  // Calculate elevation range for Y-axis labels
+  let elevationMin = 0;
+  let elevationMax = 0;
+  let elevationRange = 1;
+  
+  if (baseData.length > 0) {
+    const baseValid = baseData.filter(v => v !== null && v !== undefined);
+    if (baseValid.length > 0) {
+      elevationMin = Math.min(...baseValid);
+      elevationMax = Math.max(...baseValid);
+      elevationRange = elevationMax - elevationMin || 1;
+    }
+  }
+  
   for (let i = 0; i <= gridSteps; i++) {
     const y = padding.top + (graphHeight / gridSteps) * i;
     ctx.beginPath();
@@ -1352,41 +1415,17 @@ function drawHeightgraph(elevations, totalDistance, encodedValues = {}, coordina
     ctx.lineTo(padding.left + graphWidth, y);
     ctx.stroke();
     
-    // Label
-    let labelValue;
-    if (isNumeric) {
-      labelValue = maxValue - (valueRange / gridSteps) * i;
-      if (selectedType === 'time') {
-        // Format time in seconds
-        const minutes = Math.round(labelValue / 60);
-        ctx.fillStyle = '#6b7280';
-        ctx.font = '10px sans-serif';
-        ctx.textAlign = 'right';
-        ctx.fillText(minutes + ' min', padding.left - 5, y + 3);
-      } else if (selectedType === 'distance') {
-        // Format distance in meters
-        const km = (labelValue / 1000).toFixed(1);
-        ctx.fillStyle = '#6b7280';
-        ctx.font = '10px sans-serif';
-        ctx.textAlign = 'right';
-        ctx.fillText(km + ' km', padding.left - 5, y + 3);
-      } else {
-        // Elevation or other numeric
-        ctx.fillStyle = '#6b7280';
-        ctx.font = '10px sans-serif';
-        ctx.textAlign = 'right';
-        ctx.fillText(Math.round(labelValue) + (selectedType === 'elevation' ? ' m' : ''), padding.left - 5, y + 3);
-      }
-    } else {
-      // Categorical data - show category names
-      const categoryIndex = Math.round(maxValue - (valueRange / gridSteps) * i);
-      const categories = [...new Set(dataToVisualize.filter(v => v !== null && v !== undefined))];
-      if (categories[categoryIndex]) {
-        ctx.fillStyle = '#6b7280';
-        ctx.font = '9px sans-serif';
-        ctx.textAlign = 'right';
-        ctx.fillText(String(categories[categoryIndex]).substring(0, 8), padding.left - 5, y + 3);
-      }
+    // Label - always use elevation data for Y-axis, always natural numbers
+    const elevationValue = elevationMax - (elevationRange / gridSteps) * i;
+    const labelText = Math.round(elevationValue) + ' m';
+    
+    // Only draw label if it's not a duplicate
+    if (!yLabels.has(labelText)) {
+      yLabels.add(labelText);
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(labelText, padding.left - 5, y + 3);
     }
   }
   
@@ -1462,18 +1501,45 @@ function drawHeightgraph(elevations, totalDistance, encodedValues = {}, coordina
   
   // Overlay for encoded values removed - only showing elevation profile
   
-  // Draw distance labels on x-axis (only natural numbers)
+  // Draw distance labels on x-axis (natural numbers, no duplicates, with 0.5km steps if needed)
   ctx.fillStyle = '#6b7280';
   ctx.font = '10px sans-serif';
   ctx.textAlign = 'center';
   
-  const distanceSteps = 5;
+  const totalDistanceKm = totalDistance / 1000;
+  let distanceSteps = 5;
+  let stepSize = totalDistanceKm / distanceSteps;
+  
+  // If total distance is small and would only show 0 and 1 km, use 0.5 km steps
+  if (totalDistanceKm <= 1.5 && stepSize >= 0.3) {
+    distanceSteps = Math.ceil(totalDistanceKm * 2); // Double the steps for 0.5km increments
+    stepSize = 0.5;
+  } else {
+    stepSize = totalDistanceKm / distanceSteps;
+  }
+  
+  const xLabels = new Set(); // Track X-axis labels to avoid duplicates
+  
   for (let i = 0; i <= distanceSteps; i++) {
     const x = padding.left + (graphWidth / distanceSteps) * i;
-    const distance = (totalDistance / 1000 / distanceSteps) * i;
-    // Only show natural numbers (whole numbers)
-    const distanceRounded = Math.round(distance);
-    ctx.fillText(distanceRounded + ' km', x, height - 5);
+    const distance = stepSize * i;
+    
+    // Format: use natural numbers, but allow 0.5 km if stepSize is 0.5
+    let labelText;
+    if (stepSize === 0.5) {
+      // Show 0.5 km steps
+      labelText = distance.toFixed(1) + ' km';
+    } else {
+      // Show natural numbers (whole numbers)
+      const distanceRounded = Math.round(distance);
+      labelText = distanceRounded + ' km';
+    }
+    
+    // Only draw label if it's not a duplicate
+    if (!xLabels.has(labelText)) {
+      xLabels.add(labelText);
+      ctx.fillText(labelText, x, height - 5);
+    }
   }
   
   // Axis titles removed to prevent overlap
@@ -1574,8 +1640,39 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
       
       // Show tooltip
       tooltip.style.display = 'block';
-      tooltip.style.left = (rect.left + x + 10) + 'px';
-      tooltip.style.top = (rect.top + y - 30) + 'px';
+      
+      // Calculate tooltip position
+      const tooltipWidth = 150; // Approximate tooltip width
+      const tooltipHeight = 60; // Approximate tooltip height
+      const offsetX = 10; // Horizontal offset from cursor
+      const offsetY = -30; // Vertical offset from cursor
+      
+      let tooltipLeft = rect.left + x + offsetX;
+      let tooltipTop = rect.top + y + offsetY;
+      
+      // Check if tooltip goes over right edge of viewport
+      if (tooltipLeft + tooltipWidth > window.innerWidth) {
+        // Position tooltip to the left of cursor
+        tooltipLeft = rect.left + x - tooltipWidth - offsetX;
+      }
+      
+      // Check if tooltip goes over left edge of viewport
+      if (tooltipLeft < 0) {
+        tooltipLeft = 10; // Small margin from left edge
+      }
+      
+      // Check if tooltip goes over top edge of viewport
+      if (tooltipTop < 0) {
+        tooltipTop = 10; // Small margin from top edge
+      }
+      
+      // Check if tooltip goes over bottom edge of viewport
+      if (tooltipTop + tooltipHeight > window.innerHeight) {
+        tooltipTop = window.innerHeight - tooltipHeight - 10; // Small margin from bottom edge
+      }
+      
+      tooltip.style.left = tooltipLeft + 'px';
+      tooltip.style.top = tooltipTop + 'px';
       
       // Build tooltip content - only show distance, custom_present, and elevation
       let tooltipContent = `Distanz: ${(distance / 1000).toFixed(2)} km<br>`;
