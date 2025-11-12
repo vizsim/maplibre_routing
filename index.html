@@ -136,6 +136,35 @@
         </div>
       </div>
       
+      <!-- Waypoints section -->
+      <div class="routing-input-group">
+        <div class="input-with-icon">
+          <div class="input-icon input-icon-waypoint">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="16"></line>
+              <line x1="8" y1="12" x2="16" y2="12"></line>
+            </svg>
+          </div>
+          <div class="input-with-button">
+            <div class="waypoints-header-field">
+              <span>Zwischenpunkte</span>
+            </div>
+            <button id="add-waypoint" class="btn-add-waypoint" title="Zwischenpunkt hinzufügen">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Waypoints list container -->
+      <div id="waypoints-container" class="waypoints-container">
+        <div id="waypoints-list" class="waypoints-list"></div>
+      </div>
+      
       <div class="routing-buttons">
         <button id="calculate-route" class="btn-primary">Route berechnen</button>
         <button id="hide-route" class="btn-icon" title="Ausblenden/Einblenden">

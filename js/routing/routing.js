@@ -45,8 +45,11 @@ function getProfileParam() {
 }
 
 // Build GET request URL for route calculation
-function buildGetRequestUrl(start, end, profileParam) {
-  const baseUrl = `${GRAPHHOPPER_URL}/route?point=${start[1]},${start[0]}&point=${end[1]},${end[0]}&profile=${profileParam}&points_encoded=false&elevation=true`;
+// points: Array of [lng, lat] coordinates
+function buildGetRequestUrl(points, profileParam) {
+  // Build point parameters: point=lat,lng&point=lat,lng&...
+  const pointParams = points.map(p => `point=${p[1]},${p[0]}`).join('&');
+  const baseUrl = `${GRAPHHOPPER_URL}/route?${pointParams}&profile=${profileParam}&points_encoded=false&elevation=true`;
   const chDisableParam = profileParam === 'car' ? '&ch.disable=true' : '';
   const detailsParams = ['surface', 'mapillary_coverage', 'road_class', 'road_access', 'bicycle_infra']
     .map(d => `details=${d}`)
@@ -371,7 +374,7 @@ export function setupRouting(map) {
   }
 }
 
-export async function calculateRoute(map, start, end) {
+export async function calculateRoute(map, start, end, waypoints = []) {
   // Prevent parallel route calculations
   if (routeCalculationInProgress) {
     console.warn('Route-Berechnung bereits in Arbeit, ignoriere neue Anfrage');
@@ -381,6 +384,12 @@ export async function calculateRoute(map, start, end) {
   // Validate coordinates
   validateCoordinates(start, 'Startpunkt');
   validateCoordinates(end, 'Endpunkt');
+  waypoints.forEach((wp, index) => {
+    validateCoordinates(wp, `Zwischenpunkt ${index + 1}`);
+  });
+  
+  // Build points array: [start, ...waypoints, end]
+  const allPoints = [start, ...waypoints, end];
   
   routeCalculationInProgress = true;
   const calculateBtn = document.getElementById('calculate-route');
@@ -407,8 +416,7 @@ export async function calculateRoute(map, start, end) {
     if (hasCustomModel) {
       // POST request with JSON body
       const requestBody = buildPostRequestBodyWithCustomModel(
-        start,
-        end,
+        allPoints,
         routeState.selectedProfile,
         routeState.customModel
       );
@@ -424,7 +432,7 @@ export async function calculateRoute(map, start, end) {
       }
     } else {
       // GET request with URL parameters
-      const url = buildGetRequestUrl(start, end, profileParam);
+      const url = buildGetRequestUrl(allPoints, profileParam);
       response = await fetchRouteGet(url);
     }
     

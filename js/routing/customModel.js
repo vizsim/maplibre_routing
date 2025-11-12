@@ -55,14 +55,15 @@ export function isDefaultCustomModel(customModel) {
 }
 
 // Build POST request body with custom model
-export function buildPostRequestBodyWithCustomModel(start, end, profile, customModel) {
+// points: Array of [lng, lat] coordinates
+export function buildPostRequestBodyWithCustomModel(points, profile, customModel) {
   const graphHopperProfile = getGraphHopperProfile(profile);
   const requestBody = {
-    points: [[start[0], start[1]], [end[0], end[1]]], // [lng, lat] format
+    points: points, // Array of [lng, lat] coordinates
     profile: graphHopperProfile,
     points_encoded: false,
     elevation: true,
-    details: ['surface', 'mapillary_coverage', 'road_class', 'road_access'],
+    details: ['surface', 'mapillary_coverage', 'road_class', 'road_access', 'bicycle_infra'],
     custom_model: customModel
   };
   

@@ -69,7 +69,7 @@ export function setupUIHandlers(map) {
       if (routeState.startPoint && routeState.endPoint) {
         // Import dynamically to avoid circular dependency
         import('./routing.js').then(({ calculateRoute }) => {
-          calculateRoute(map, routeState.startPoint, routeState.endPoint);
+          calculateRoute(map, routeState.startPoint, routeState.endPoint, routeState.waypoints);
         });
       }
     });
@@ -169,7 +169,7 @@ export function setupUIHandlers(map) {
       if (routeState.startPoint && routeState.endPoint) {
         // Import dynamically to avoid circular dependency
         import('./routing.js').then(({ calculateRoute }) => {
-          calculateRoute(map, routeState.startPoint, routeState.endPoint);
+          calculateRoute(map, routeState.startPoint, routeState.endPoint, routeState.waypoints);
         });
       } else {
         alert('Bitte Start- und Endpunkt setzen');
@@ -232,7 +232,7 @@ export function setupUIHandlers(map) {
               }
               
               // Try to calculate route
-              calculateRoute(map, routeState.startPoint, routeState.endPoint);
+              calculateRoute(map, routeState.startPoint, routeState.endPoint, routeState.waypoints);
               
               // Check if calculation started
               setTimeout(() => {
@@ -301,6 +301,21 @@ export function setupUIHandlers(map) {
       }
     });
   }
+  
+  // Add waypoint button handler
+  const addWaypointBtn = document.getElementById('add-waypoint');
+  if (addWaypointBtn) {
+    addWaypointBtn.addEventListener('click', () => {
+      routeState.isSelectingWaypoint = true;
+      routeState.isSelectingStart = false;
+      routeState.isSelectingEnd = false;
+      map.getCanvas().style.cursor = 'crosshair';
+      
+      // Update button states
+      if (startBtn) startBtn.classList.remove('active');
+      if (endBtn) endBtn.classList.remove('active');
+    });
+  }
 
   // Map click handler
   map.on('click', (e) => {
@@ -318,6 +333,10 @@ export function setupUIHandlers(map) {
       routeState.isSelectingEnd = false;
       map.getCanvas().style.cursor = '';
       if (endBtn) endBtn.classList.remove('active');
+    } else if (routeState.isSelectingWaypoint) {
+      addWaypoint(map, e.lngLat);
+      routeState.isSelectingWaypoint = false;
+      map.getCanvas().style.cursor = '';
     }
   });
 
@@ -369,7 +388,7 @@ export function setStartPoint(map, lngLat) {
   if (routeState.startPoint && routeState.endPoint) {
     // Import dynamically to avoid circular dependency
     import('./routing.js').then(({ calculateRoute }) => {
-      calculateRoute(map, routeState.startPoint, routeState.endPoint);
+      calculateRoute(map, routeState.startPoint, routeState.endPoint, routeState.waypoints);
     });
   }
 }
@@ -387,7 +406,7 @@ export function setEndPoint(map, lngLat) {
   if (routeState.startPoint && routeState.endPoint) {
     // Import dynamically to avoid circular dependency
     import('./routing.js').then(({ calculateRoute }) => {
-      calculateRoute(map, routeState.startPoint, routeState.endPoint);
+      calculateRoute(map, routeState.startPoint, routeState.endPoint, routeState.waypoints);
     });
   }
 }
@@ -402,6 +421,11 @@ export function updateMarkers(map) {
     routeState.endMarker.remove();
     routeState.endMarker = null;
   }
+  // Remove all waypoint markers
+  routeState.waypointMarkers.forEach(marker => {
+    if (marker) marker.remove();
+  });
+  routeState.waypointMarkers = [];
   
   // Create draggable start marker with pin icon
   if (routeState.startPoint) {
@@ -444,7 +468,7 @@ export function updateMarkers(map) {
       if (routeState.endPoint) {
         // Import dynamically to avoid circular dependency
         import('./routing.js').then(({ calculateRoute }) => {
-          calculateRoute(map, routeState.startPoint, routeState.endPoint);
+          calculateRoute(map, routeState.startPoint, routeState.endPoint, routeState.waypoints);
         });
       }
     });
@@ -491,10 +515,119 @@ export function updateMarkers(map) {
       if (routeState.startPoint) {
         // Import dynamically to avoid circular dependency
         import('./routing.js').then(({ calculateRoute }) => {
-          calculateRoute(map, routeState.startPoint, routeState.endPoint);
+          calculateRoute(map, routeState.startPoint, routeState.endPoint, routeState.waypoints);
         });
       }
     });
+  }
+  
+  // Create waypoint markers
+  routeState.waypoints.forEach((waypoint, index) => {
+    const el = document.createElement('div');
+    el.className = 'custom-marker waypoint-marker';
+    el.style.width = '28px';
+    el.style.height = '28px';
+    el.style.cursor = 'grab';
+    el.innerHTML = `
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="#f59e0b" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+        <text x="12" y="14" text-anchor="middle" fill="white" font-size="10" font-weight="bold">${index + 1}</text>
+      </svg>
+    `;
+    el.style.filter = 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))';
+    
+    const marker = new maplibregl.Marker({
+      element: el,
+      draggable: true,
+      anchor: 'bottom'
+    })
+      .setLngLat(waypoint)
+      .addTo(map);
+    
+    marker.on('dragstart', () => {
+      el.style.cursor = 'grabbing';
+    });
+    
+    marker.on('dragend', () => {
+      el.style.cursor = 'grab';
+      const lngLat = marker.getLngLat();
+      routeState.waypoints[index] = [lngLat.lng, lngLat.lat];
+      updateWaypointsList();
+      
+      // Recalculate route if both start and end points exist
+      if (routeState.startPoint && routeState.endPoint) {
+        import('./routing.js').then(({ calculateRoute }) => {
+          calculateRoute(map, routeState.startPoint, routeState.endPoint, routeState.waypoints);
+        });
+      }
+    });
+    
+    routeState.waypointMarkers.push(marker);
+  });
+  
+  // Waypoints container is always visible now, no need to hide/show
+}
+
+// Update waypoints list in UI
+export function updateWaypointsList() {
+  const waypointsList = document.getElementById('waypoints-list');
+  if (!waypointsList) return;
+  
+  waypointsList.innerHTML = '';
+  
+  routeState.waypoints.forEach((waypoint, index) => {
+    const item = document.createElement('div');
+    item.className = 'waypoint-item';
+    item.innerHTML = `
+      <span class="waypoint-number">${index + 1}</span>
+      <span class="waypoint-coords">${waypoint[1].toFixed(5)}, ${waypoint[0].toFixed(5)}</span>
+      <button class="btn-remove-waypoint" data-index="${index}" title="Zwischenpunkt entfernen">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    `;
+    waypointsList.appendChild(item);
+    
+    // Remove button handler
+    const removeBtn = item.querySelector('.btn-remove-waypoint');
+    if (removeBtn) {
+      removeBtn.addEventListener('click', () => {
+        removeWaypoint(index);
+      });
+    }
+  });
+}
+
+// Add waypoint
+export function addWaypoint(map, lngLat) {
+  routeState.waypoints.push([lngLat.lng, lngLat.lat]);
+  updateMarkers(map);
+  updateWaypointsList();
+  
+  // Recalculate route if both start and end points exist
+  if (routeState.startPoint && routeState.endPoint) {
+    import('./routing.js').then(({ calculateRoute }) => {
+      calculateRoute(map, routeState.startPoint, routeState.endPoint, routeState.waypoints);
+    });
+  }
+}
+
+// Remove waypoint
+export function removeWaypoint(index) {
+  routeState.waypoints.splice(index, 1);
+  const map = routeState.mapInstance;
+  if (map) {
+    updateMarkers(map);
+    updateWaypointsList();
+    
+    // Recalculate route if both start and end points exist
+    if (routeState.startPoint && routeState.endPoint) {
+      import('./routing.js').then(({ calculateRoute }) => {
+        calculateRoute(map, routeState.startPoint, routeState.endPoint, routeState.waypoints);
+      });
+    }
   }
 }
 

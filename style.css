@@ -774,6 +774,8 @@ code {
   display: flex;
   gap: 4px;
   align-items: stretch;
+  flex: 1;
+  min-width: 0;
 }
 
 .input-with-button input {
@@ -797,11 +799,13 @@ code {
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
-  min-width: 32px;
-  min-height: 32px;
+  width: 32px;
+  height: 32px;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .btn-set-point:hover {
@@ -824,6 +828,119 @@ code {
 
 .btn-set-end svg {
   stroke: #ef4444;
+}
+
+/* ───── Waypoints ───── */
+/* Waypoints header field (styled like input field) */
+.waypoints-header-field {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 13px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #f9fafb;
+  display: flex;
+  align-items: center;
+  color: #374151;
+  min-height: 32px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Waypoints container (for the list below header) */
+.waypoints-container {
+  margin-bottom: 10px;
+  padding: 0 0 0 32px; /* Left padding to align with input fields */
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+/* Add waypoint button */
+.btn-add-waypoint {
+  padding: 6px;
+  width: 32px;
+  height: 32px;
+  background: #f3f4f6;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  color: #f59e0b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.btn-add-waypoint:hover {
+  background: #e5e7eb;
+  border-color: #999;
+}
+
+.btn-add-waypoint svg {
+  stroke: #f59e0b;
+}
+
+/* Waypoints list */
+.waypoints-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Individual waypoint item */
+.waypoint-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.waypoint-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: #f59e0b;
+  color: white;
+  border-radius: 50%;
+  font-weight: bold;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.waypoint-coords {
+  flex: 1;
+  color: #6b7280;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+}
+
+.btn-remove-waypoint {
+  padding: 2px 4px;
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.btn-remove-waypoint:hover {
+  background: #fee2e2;
+  color: #dc2626;
 }
 
 .routing-buttons {
@@ -1301,9 +1418,6 @@ code {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
-.legend-line.solid {
-  /* Solid line - uses background color from inline style */
-}
 
 .legend-line.dashed {
   background: repeating-linear-gradient(
