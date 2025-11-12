@@ -3,6 +3,44 @@
 import { routeState } from './routeState.js';
 import { getColorForEncodedValue } from './colorSchemes.js';
 
+// Bicycle infrastructure descriptions mapping (same as in heightgraph.js)
+const BICYCLE_INFRA_DESCRIPTIONS = {
+  'none': 'Keine spezielle Fahrradinfrastruktur',
+  'bicycleroad': 'Fahrradstraße',
+  'bicycleroad_vehicledestination': 'Fahrradstraße mit Anlieger/Kfz frei',
+  'pedestrianareabicycleyes': 'Fußgängerzone, Fahrrad frei',
+  'cycleway_adjoining': 'Radweg, straßenbegleitend',
+  'cycleway_isolated': 'Radweg, selbstständig geführt',
+  'cycleway_adjoiningorisolated': 'Radweg (Fallback)',
+  'cyclewaylink': 'Radweg-Routing-Verbindungsstück',
+  'crossing': 'Straßenquerung',
+  'cyclewayonhighway_advisory': 'Schutzstreifen',
+  'cyclewayonhighway_exclusive': 'Radfahrstreifen',
+  'cyclewayonhighway_advisoryorexclusive': 'Radfahrstreifen/Schutzstreifen (Fallback)',
+  'cyclewayonhighwaybetweenlanes': 'Radfahrstreifen in Mittellage ("Angstweiche")',
+  'cyclewayonhighwayprotected': 'Protected Bike Lane (PBL)',
+  'sharedbuslanebikewithbus': 'Radfahrstreifen mit Freigabe Busverkehr',
+  'sharedbuslanebuswithbike': 'Bussonderfahrstreifen mit Fahrrad frei',
+  'sharedmotorvehiclelane': 'Gemeinsamer Fahrstreifen',
+  'footandcyclewaysegregated_adjoining': 'Getrennter Geh- und Radweg, straßenbegleitend',
+  'footandcyclewaysegregated_isolated': 'Getrennter Geh- und Radweg, selbstständig',
+  'footandcyclewaysegregated_adjoiningorisolated': 'Getrennter Geh- und Radweg (Fallback)',
+  'footandcyclewayshared_adjoining': 'Gemeinsamer Geh- und Radweg, straßenbegleitend',
+  'footandcyclewayshared_isolated': 'Gemeinsamer Geh- und Radweg, selbstständig',
+  'footandcyclewayshared_adjoiningorisolated': 'Gemeinsamer Geh- und Radweg (Fallback)',
+  'footwaybicycleyes_adjoining': 'Gehweg, Fahrrad frei, straßenbegleitend',
+  'footwaybicycleyes_isolated': 'Gehweg, Fahrrad frei, selbstständig',
+  'footwaybicycleyes_adjoiningorisolated': 'Gehweg, Fahrrad frei (Fallback)',
+  'needsclarification': 'Führungsform unklar - Tags nicht ausreichend'
+};
+
+// Helper function to get bicycle infrastructure description
+function getBicycleInfraDescription(value) {
+  if (!value) return null;
+  const normalizedValue = String(value).toLowerCase();
+  return BICYCLE_INFRA_DESCRIPTIONS[normalizedValue] || null;
+}
+
 export function setupRouteHover(map) {
   // Create a popup for showing encoded values on hover
   const popup = new maplibregl.Popup({
@@ -17,6 +55,13 @@ export function setupRouteHover(map) {
   map.on('mouseleave', 'route-layer', () => {
     map.getCanvas().style.cursor = '';
     popup.remove();
+    // Clear hovered segment
+    if (map.getSource('route-hover-segment')) {
+      map.getSource('route-hover-segment').setData({
+        type: 'FeatureCollection',
+        features: []
+      });
+    }
   });
   
   map.on('mousemove', 'route-layer', (e) => {
@@ -25,54 +70,131 @@ export function setupRouteHover(map) {
       const { coordinates: originalCoordinates } = routeState.currentRouteData;
       const point = e.lngLat;
       
-      if (!originalCoordinates || originalCoordinates.length === 0) {
+      if (!originalCoordinates || originalCoordinates.length < 2) {
         popup.remove();
         return;
       }
       
-      // Find closest point on original route (not just the segment)
-      let closestPoint = originalCoordinates[0];
-      let closestIndex = 0;
-      let minDist = Infinity;
+      // Find the segment that contains the mouse position
+      // A segment is between point i and point i+1
+      let segmentStartIndex = 0;
+      let minSegmentDist = Infinity;
       
-      originalCoordinates.forEach((coord, idx) => {
-        const dist = Math.sqrt(
-          Math.pow(coord[0] - point.lng, 2) + 
-          Math.pow(coord[1] - point.lat, 2)
-        );
-        if (dist < minDist) {
-          minDist = dist;
-          closestPoint = coord;
-          closestIndex = idx;
+      // Find the closest segment to the mouse position
+      for (let i = 0; i < originalCoordinates.length - 1; i++) {
+        const p1 = originalCoordinates[i];
+        const p2 = originalCoordinates[i + 1];
+        
+        // Calculate distance from point to line segment
+        const A = point.lng - p1[0];
+        const B = point.lat - p1[1];
+        const C = p2[0] - p1[0];
+        const D = p2[1] - p1[1];
+        
+        const dot = A * C + B * D;
+        const lenSq = C * C + D * D;
+        let param = -1;
+        
+        if (lenSq !== 0) {
+          param = dot / lenSq;
         }
-      });
+        
+        let xx, yy;
+        if (param < 0) {
+          xx = p1[0];
+          yy = p1[1];
+        } else if (param > 1) {
+          xx = p2[0];
+          yy = p2[1];
+        } else {
+          xx = p1[0] + param * C;
+          yy = p1[1] + param * D;
+        }
+        
+        const dx = point.lng - xx;
+        const dy = point.lat - yy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (dist < minSegmentDist) {
+          minSegmentDist = dist;
+          segmentStartIndex = i;
+        }
+      }
       
-      // Get all available details for this point
+      // Use the start point of the segment for the value (the segment "belongs" to its start point)
+      const dataIndex = segmentStartIndex;
+      const closestPoint = point; // Use mouse position for popup location
+      
+      // Get all available details for this segment
       const { encodedValues } = routeState.currentRouteData;
       
       // Get selected encoded type from heightgraph dropdown
       const select = document.getElementById('heightgraph-encoded-select');
       const selectedType = select ? select.value : 'mapillary_coverage';
       
-      // Get the value for the selected encoded type at this point
+      // Get the value for the selected encoded type at the segment start point
       let selectedValue = null;
       let valueLabel = '';
       
       if (selectedType === 'mapillary_coverage' && encodedValues.mapillary_coverage && 
-          encodedValues.mapillary_coverage[closestIndex] !== undefined && 
-          encodedValues.mapillary_coverage[closestIndex] !== null) {
-        selectedValue = encodedValues.mapillary_coverage[closestIndex];
+          encodedValues.mapillary_coverage[dataIndex] !== undefined && 
+          encodedValues.mapillary_coverage[dataIndex] !== null) {
+        selectedValue = encodedValues.mapillary_coverage[dataIndex];
         valueLabel = 'Mapillary Coverage';
       } else if (selectedType === 'surface' && encodedValues.surface && 
-                 encodedValues.surface[closestIndex] !== undefined && 
-                 encodedValues.surface[closestIndex] !== null) {
-        selectedValue = encodedValues.surface[closestIndex];
+                 encodedValues.surface[dataIndex] !== undefined && 
+                 encodedValues.surface[dataIndex] !== null) {
+        selectedValue = encodedValues.surface[dataIndex];
         valueLabel = 'Surface';
       } else if (selectedType === 'road_class' && encodedValues.road_class && 
-                 encodedValues.road_class[closestIndex] !== undefined && 
-                 encodedValues.road_class[closestIndex] !== null) {
-        selectedValue = encodedValues.road_class[closestIndex];
+                 encodedValues.road_class[dataIndex] !== undefined && 
+                 encodedValues.road_class[dataIndex] !== null) {
+        selectedValue = encodedValues.road_class[dataIndex];
         valueLabel = 'Road Class';
+      } else if (selectedType === 'bicycle_infra' && encodedValues.bicycle_infra && 
+                 encodedValues.bicycle_infra[dataIndex] !== undefined && 
+                 encodedValues.bicycle_infra[dataIndex] !== null) {
+        selectedValue = encodedValues.bicycle_infra[dataIndex];
+        valueLabel = 'Bicycle Infrastructure';
+      }
+      
+      // Highlight the hovered segment by making it thicker (always show, even if no value)
+      if (segmentStartIndex < originalCoordinates.length - 1) {
+        const segmentCoords = [
+          originalCoordinates[segmentStartIndex],
+          originalCoordinates[segmentStartIndex + 1]
+        ];
+        
+        // Get color for the segment based on selected encoded value
+        let segmentColor = '#3b82f6'; // Default blue
+        if (selectedValue !== null) {
+          const allValues = encodedValues[selectedType] || [];
+          segmentColor = getColorForEncodedValue(selectedType, selectedValue, allValues);
+        }
+        
+        if (map.getSource('route-hover-segment')) {
+          map.getSource('route-hover-segment').setData({
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: segmentCoords
+            },
+            properties: {
+              color: segmentColor
+            }
+          });
+          
+          // Update layer to use property-based coloring
+          map.setPaintProperty('route-hover-segment-layer', 'line-color', ['get', 'color']);
+        }
+      } else {
+        // Clear hovered segment if no valid segment
+        if (map.getSource('route-hover-segment')) {
+          map.getSource('route-hover-segment').setData({
+            type: 'FeatureCollection',
+            features: []
+          });
+        }
       }
       
       // Show popup only if we have a value for the selected type
@@ -80,6 +202,10 @@ export function setupRouteHover(map) {
         let displayValue = '';
         if (typeof selectedValue === 'boolean') {
           displayValue = selectedValue ? 'Ja' : 'Nein';
+        } else if (selectedType === 'bicycle_infra') {
+          // Use description for bicycle_infra
+          const description = getBicycleInfraDescription(selectedValue);
+          displayValue = description || String(selectedValue);
         } else {
           displayValue = String(selectedValue);
         }

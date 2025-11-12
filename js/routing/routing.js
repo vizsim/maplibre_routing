@@ -12,8 +12,8 @@ import {
   buildPostRequestBodyWithCustomModel
 } from './customModel.js';
 
-// const GRAPHHOPPER_URL = 'http://localhost:8989';
-const GRAPHHOPPER_URL = 'https://ghroute.duckdns.org';
+const GRAPHHOPPER_URL = 'http://localhost:8989';
+//const GRAPHHOPPER_URL = 'https://ghroute.duckdns.org';
 
 // Flag to prevent parallel route calculations
 let routeCalculationInProgress = false;
@@ -44,7 +44,7 @@ function getProfileParam() {
 function buildGetRequestUrl(start, end, profileParam) {
   const baseUrl = `${GRAPHHOPPER_URL}/route?point=${start[1]},${start[0]}&point=${end[1]},${end[0]}&profile=${profileParam}&points_encoded=false&elevation=true`;
   const chDisableParam = profileParam === 'car' ? '&ch.disable=true' : '';
-  const detailsParams = ['surface', 'mapillary_coverage', 'road_class', 'road_access']
+  const detailsParams = ['surface', 'mapillary_coverage', 'road_class', 'road_access', 'bicycle_infra']
     .map(d => `details=${d}`)
     .join('&');
   return `${baseUrl}${chDisableParam}&${detailsParams}&type=json`;
@@ -57,7 +57,7 @@ async function fetchRouteGet(url) {
     if (response.ok) return response;
     
     // Try comma-separated details format
-    const urlComma = url.replace(/details=[^&]+/g, 'details=' + ['surface', 'mapillary_coverage', 'road_class', 'road_access'].join(','));
+    const urlComma = url.replace(/details=[^&]+/g, 'details=' + ['surface', 'mapillary_coverage', 'road_class', 'road_access', 'bicycle_infra'].join(','));
     response = await fetch(urlComma);
     if (response.ok) return response;
     
@@ -281,6 +281,17 @@ export function setupRouting(map) {
       }
     });
   }
+
+  // Create source for route hover segment (highlighted segment on hover)
+  if (!map.getSource('route-hover-segment')) {
+    map.addSource('route-hover-segment', {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: []
+      }
+    });
+  }
   
   // Create layer for route line (on top of mapillary_coverage layer)
   if (!map.getLayer('route-layer')) {
@@ -300,6 +311,24 @@ export function setupRouting(map) {
     });
   }
   
+  // Create layer for route hover segment (highlighted segment on hover)
+  if (!map.getLayer('route-hover-segment-layer')) {
+    map.addLayer({
+      id: 'route-hover-segment-layer',
+      type: 'line',
+      source: 'route-hover-segment',
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round'
+      },
+      paint: {
+        'line-color': '#3b82f6',
+        'line-width': 8,
+        'line-opacity': 1.0
+      }
+    });
+  }
+
   // Create layer for heightgraph hover point (point on route line)
   if (!map.getLayer('heightgraph-hover-point-layer')) {
     map.addLayer({

@@ -54,6 +54,59 @@ export const CUSTOM_PRESENT_COLORS = {
   false: '#ec4899'   // Pink for false
 };
 
+// Bicycle infrastructure colors (base hex values)
+// Grouped by infrastructure type for logical color mapping
+export const BICYCLE_INFRA_COLORS = {
+  // None
+  'none': '#9ca3af',                    // Gray
+  
+  // Fahrradstraßen (Green shades)
+  'bicycleroad': '#22c55e',              // Green
+  'bicycleroad_vehicledestination': '#16a34a', // Dark green
+  
+  // Fußgängerzone
+  'pedestrianareabicycleyes': '#10b981', // Light green
+  
+  // Bauliche Radwege (Blue shades)
+  'cycleway_adjoining': '#3b82f6',       // Blue
+  'cycleway_isolated': '#2563eb',        // Dark blue
+  'cycleway_adjoiningorisolated': '#60a5fa', // Light blue
+  'cyclewaylink': '#1d4ed8',             // Very dark blue
+  
+  // Straßenquerung
+  'crossing': '#0ea5e9',                 // Sky blue
+  
+  // Radfahrstreifen / Schutzstreifen (Orange/Yellow shades)
+  'cyclewayonhighway_advisory': '#f59e0b', // Orange
+  'cyclewayonhighway_exclusive': '#eab308', // Yellow
+  'cyclewayonhighway_advisoryorexclusive': '#fbbf24', // Light yellow
+  'cyclewayonhighwaybetweenlanes': '#f97316', // Dark orange
+  'cyclewayonhighwayprotected': '#fb923c', // Light orange
+  
+  // Busspuren
+  'sharedbuslanebikewithbus': '#facc15', // Bright yellow
+  'sharedbuslanebuswithbike': '#eab308', // Yellow
+  'sharedmotorvehiclelane': '#fbbf24',   // Light yellow
+  
+  // Getrennte Geh- und Radwege (Purple shades)
+  'footandcyclewaysegregated_adjoining': '#a855f7', // Purple
+  'footandcyclewaysegregated_isolated': '#9333ea', // Dark purple
+  'footandcyclewaysegregated_adjoiningorisolated': '#c084fc', // Light purple
+  
+  // Gemeinsame Geh- und Radwege (Pink shades)
+  'footandcyclewayshared_adjoining': '#ec4899', // Pink
+  'footandcyclewayshared_isolated': '#db2777', // Dark pink
+  'footandcyclewayshared_adjoiningorisolated': '#f472b6', // Light pink
+  
+  // Gehweg mit Rad frei (Rose shades)
+  'footwaybicycleyes_adjoining': '#f43f5e', // Rose
+  'footwaybicycleyes_isolated': '#e11d48', // Dark rose
+  'footwaybicycleyes_adjoiningorisolated': '#fb7185', // Light rose
+  
+  // Unklar
+  'needsclarification': '#dc2626'        // Red
+};
+
 // Default colors
 export const DEFAULT_COLOR = '#9ca3af'; // Gray
 export const DEFAULT_COLOR_RGBA = 'rgba(156, 163, 175, 0.3)';
@@ -116,6 +169,29 @@ export function getCustomPresentColor(value) {
 }
 
 /**
+ * Get bicycle infrastructure color (hex format)
+ * @param {string|number} value - Bicycle infrastructure value
+ * @returns {string} Hex color
+ */
+export function getBicycleInfraColor(value) {
+  if (!value) return DEFAULT_COLOR;
+  const normalizedValue = String(value).toLowerCase();
+  return BICYCLE_INFRA_COLORS[normalizedValue] || DEFAULT_COLOR;
+}
+
+/**
+ * Get bicycle infrastructure color (rgba format)
+ * @param {string|number} value - Bicycle infrastructure value
+ * @param {number} opacity - Opacity (0.0 - 1.0)
+ * @returns {string} RGBA color
+ */
+export function getBicycleInfraColorRgba(value, opacity = 0.3) {
+  if (!value) return opacity === 0.15 ? DEFAULT_COLOR_RGBA_LIGHT : DEFAULT_COLOR_RGBA;
+  const hexColor = getBicycleInfraColor(value);
+  return hexToRgba(hexColor, opacity);
+}
+
+/**
  * Get color for encoded value (general purpose)
  * Used in routeVisualization.js
  * @param {string} encodedType - Type of encoded value
@@ -138,6 +214,10 @@ export function getColorForEncodedValue(encodedType, value, allValues = []) {
   
   if (encodedType === 'road_class') {
     return getRoadClassColor(value);
+  }
+  
+  if (encodedType === 'bicycle_infra') {
+    return getBicycleInfraColor(value);
   }
   
   if (encodedType === 'elevation' || encodedType === 'time' || encodedType === 'distance') {

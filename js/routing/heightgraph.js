@@ -2,7 +2,45 @@
 
 import { routeState } from './routeState.js';
 import { updateRouteColor } from './routeVisualization.js';
-import { getSurfaceColorRgba, getRoadClassColorRgba } from './colorSchemes.js';
+import { getSurfaceColorRgba, getRoadClassColorRgba, getBicycleInfraColorRgba } from './colorSchemes.js';
+
+// Bicycle infrastructure descriptions mapping
+const BICYCLE_INFRA_DESCRIPTIONS = {
+  'none': 'Keine spezielle Fahrradinfrastruktur',
+  'bicycleroad': 'Fahrradstraße',
+  'bicycleroad_vehicledestination': 'Fahrradstraße mit<br>Anlieger/Kfz frei',
+  'pedestrianareabicycleyes': 'Fußgängerzone,<br>Fahrrad frei',
+  'cycleway_adjoining': 'Radweg,<br>straßenbegleitend',
+  'cycleway_isolated': 'Radweg,<br>selbstständig geführt',
+  'cycleway_adjoiningorisolated': 'Radweg (Fallback)',
+  'cyclewaylink': 'Radweg-Routing-<br>Verbindungsstück',
+  'crossing': 'Straßenquerung',
+  'cyclewayonhighway_advisory': 'Schutzstreifen',
+  'cyclewayonhighway_exclusive': 'Radfahrstreifen',
+  'cyclewayonhighway_advisoryorexclusive': 'Radfahrstreifen/<br>Schutzstreifen (Fallback)',
+  'cyclewayonhighwaybetweenlanes': 'Radfahrstreifen in<br>Mittellage ("Angstweiche")',
+  'cyclewayonhighwayprotected': 'Protected Bike Lane (PBL)',
+  'sharedbuslanebikewithbus': 'Radfahrstreifen mit<br>Freigabe Busverkehr',
+  'sharedbuslanebuswithbike': 'Bussonderfahrstreifen<br>mit Fahrrad frei',
+  'sharedmotorvehiclelane': 'Gemeinsamer Fahrstreifen',
+  'footandcyclewaysegregated_adjoining': 'Getrennter Geh- und<br>Radweg, straßenbegleitend',
+  'footandcyclewaysegregated_isolated': 'Getrennter Geh- und<br>Radweg, selbstständig',
+  'footandcyclewaysegregated_adjoiningorisolated': 'Getrennter Geh- und<br>Radweg (Fallback)',
+  'footandcyclewayshared_adjoining': 'Gemeinsamer Geh- und<br>Radweg, straßenbegleitend',
+  'footandcyclewayshared_isolated': 'Gemeinsamer Geh- und<br>Radweg, selbstständig',
+  'footandcyclewayshared_adjoiningorisolated': 'Gemeinsamer Geh- und<br>Radweg (Fallback)',
+  'footwaybicycleyes_adjoining': 'Gehweg, Fahrrad frei,<br>straßenbegleitend',
+  'footwaybicycleyes_isolated': 'Gehweg, Fahrrad frei,<br>selbstständig',
+  'footwaybicycleyes_adjoiningorisolated': 'Gehweg, Fahrrad frei<br>(Fallback)',
+  'needsclarification': 'Führungsform unklar -<br>Tags nicht ausreichend'
+};
+
+// Helper function to get bicycle infrastructure description
+function getBicycleInfraDescription(value) {
+  if (!value) return null;
+  const normalizedValue = String(value).toLowerCase();
+  return BICYCLE_INFRA_DESCRIPTIONS[normalizedValue] || null;
+}
 
 // Centralized configuration
 const HEIGHTGRAPH_CONFIG = {
@@ -349,6 +387,8 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
         fillSegmentsByValue(ctx, points, encodedValues.surface, getSurfaceColor, padding, graphHeight);
       } else if (selectedType === 'road_class' && encodedValues.road_class && encodedValues.road_class.length > 0 && points.length > 0) {
         fillSegmentsByValue(ctx, points, encodedValues.road_class, getRoadClassColor, padding, graphHeight);
+      } else if (selectedType === 'bicycle_infra' && encodedValues.bicycle_infra && encodedValues.bicycle_infra.length > 0 && points.length > 0) {
+        fillSegmentsByValue(ctx, points, encodedValues.bicycle_infra, getBicycleInfraColor, padding, graphHeight);
       } else {
         // Fallback: fill with default blue if no encoded value data
         // Note: This requires the elevation line path to still be active
@@ -669,6 +709,18 @@ export function updateHeightgraphStats(encodedType, encodedValues) {
       // Get road_class color and make it lighter for background
       const roadClassColor = getRoadClassColorForStats(key);
       backgroundColor = roadClassColor;
+    } else if (encodedType === 'bicycle_infra') {
+      // Get bicycle_infra color and make it lighter for background
+      const bicycleInfraColor = getBicycleInfraColorForStats(key);
+      backgroundColor = bicycleInfraColor;
+      // Use description if available, otherwise format the key
+      const description = getBicycleInfraDescription(key);
+      if (description) {
+        displayKey = description; // Already contains <br> tags for line breaks
+      } else {
+        // Fallback: replace underscores with line breaks before underscore
+        displayKey = displayKey.replace(/_/g, '<br>_');
+      }
     }
     
     statsHTML += `<div class="heightgraph-stat-item" style="background-color: ${backgroundColor};">
@@ -698,6 +750,14 @@ function getSurfaceColor(surfaceValue) {
 
 function getRoadClassColor(roadClassValue) {
   return getRoadClassColorRgba(roadClassValue, 0.3);
+}
+
+function getBicycleInfraColor(bicycleInfraValue) {
+  return getBicycleInfraColorRgba(bicycleInfraValue, 0.3);
+}
+
+function getBicycleInfraColorForStats(bicycleInfraValue) {
+  return getBicycleInfraColorRgba(bicycleInfraValue, 0.15);
 }
 
 function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordinates, cumulativeDistances = null) {
@@ -755,7 +815,9 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
       pointer-events: none;
       z-index: 1000;
       display: none;
-      white-space: nowrap;
+      white-space: normal;
+      max-width: 250px;
+      word-wrap: break-word;
     `;
     document.body.appendChild(tooltip);
   }
@@ -809,7 +871,7 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
       return;
     }
     
-    // Calculate which point in the data corresponds to this x position
+    // Calculate which segment the mouse is over (not just a point)
     // Use distance-based calculation to match the X-axis labels
     // Calculate relative position within the graph area (0 to 1)
     // Use actualGraphWidth (from rendered size), not graphWidth (from canvas.width)!
@@ -822,47 +884,119 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
     // clampedRelativeX is already a ratio [0, 1], so use it directly
     const targetDistance = clampedRelativeX * actualTotalDistance;
     
-    // Find the closest point based on cumulative distance
-    let dataIndex = 0;
-    let minDistanceDiff = Infinity;
+    // Find the segment that contains this distance
+    // A segment is between point i and point i+1
+    let segmentStartIndex = 0;
+    let segmentEndIndex = 0;
+    let segmentStartDistance = 0;
+    let segmentEndDistance = 0;
     
-    if (computedCumulativeDistances && computedCumulativeDistances.length > 0) {
-      // Find closest point using cumulative distances
-      for (let i = 0; i < computedCumulativeDistances.length; i++) {
-        const distDiff = Math.abs(computedCumulativeDistances[i] - targetDistance);
-        if (distDiff < minDistanceDiff) {
-          minDistanceDiff = distDiff;
-          dataIndex = i;
+    if (computedCumulativeDistances && computedCumulativeDistances.length > 1) {
+      // Find the segment containing targetDistance
+      for (let i = 0; i < computedCumulativeDistances.length - 1; i++) {
+        const startDist = computedCumulativeDistances[i];
+        const endDist = computedCumulativeDistances[i + 1];
+        
+        if (targetDistance >= startDist && targetDistance <= endDist) {
+          segmentStartIndex = i;
+          segmentEndIndex = i + 1;
+          segmentStartDistance = startDist;
+          segmentEndDistance = endDist;
+          break;
         }
+      }
+      // If we're at the end, use the last segment
+      if (targetDistance >= computedCumulativeDistances[computedCumulativeDistances.length - 1]) {
+        segmentStartIndex = computedCumulativeDistances.length - 2;
+        segmentEndIndex = computedCumulativeDistances.length - 1;
+        segmentStartDistance = computedCumulativeDistances[segmentStartIndex];
+        segmentEndDistance = computedCumulativeDistances[segmentEndIndex];
       }
     } else {
       // Fallback: use index-based calculation
-      dataIndex = Math.min(elevations.length - 1, Math.max(0, Math.round(clampedRelativeX * (elevations.length - 1))));
+      const totalPoints = elevations.length;
+      const pointIndex = Math.min(totalPoints - 1, Math.max(0, Math.round(clampedRelativeX * (totalPoints - 1))));
+      segmentStartIndex = Math.max(0, Math.min(pointIndex, totalPoints - 2));
+      segmentEndIndex = segmentStartIndex + 1;
+      segmentStartDistance = (totalDistance / totalPoints) * segmentStartIndex;
+      segmentEndDistance = (totalDistance / totalPoints) * segmentEndIndex;
     }
+    
+    // Use the start point of the segment for the value (the segment "belongs" to its start point)
+    const dataIndex = segmentStartIndex;
+    
+    // Calculate segment midpoint for positioning
+    const segmentMidDistance = (segmentStartDistance + segmentEndDistance) / 2;
+    const segmentMidRelativeX = segmentMidDistance / actualTotalDistance;
+    const segmentMidX = padding.left + (segmentMidRelativeX * actualGraphWidth);
     
     if (dataIndex >= 0 && dataIndex < elevations.length && dataIndex < coordinates.length) {
       const elevation = elevations[dataIndex];
       const coord = coordinates[dataIndex];
-      const distance = computedCumulativeDistances && computedCumulativeDistances[dataIndex] !== undefined 
-        ? computedCumulativeDistances[dataIndex] 
-        : (totalDistance / elevations.length) * dataIndex;
+      const distance = segmentMidDistance; // Use midpoint distance for display
       
-      // Show tooltip
+      // Build tooltip content first - show distance, elevation, and selected encoded value
+      let tooltipContent = `Distanz: ${(distance / 1000).toFixed(2)} km<br>`;
+      
+      if (elevation !== null && elevation !== undefined) {
+        tooltipContent += `Höhe: ${Math.round(elevation)} m<br>`;
+      }
+      
+      // Add selected encoded value (mapillary_coverage, surface, road_class, or bicycle_infra)
+      if (selectedType === 'mapillary_coverage' && encodedValues.mapillary_coverage && encodedValues.mapillary_coverage[dataIndex] !== undefined && 
+          encodedValues.mapillary_coverage[dataIndex] !== null) {
+        const customValue = encodedValues.mapillary_coverage[dataIndex];
+        const customPresentText = typeof customValue === 'boolean' 
+          ? (customValue ? 'Ja' : 'Nein') 
+          : String(customValue);
+        tooltipContent += `Mapillary Coverage: ${customPresentText}`;
+      } else if (selectedType === 'surface' && encodedValues.surface && encodedValues.surface[dataIndex] !== undefined && 
+                 encodedValues.surface[dataIndex] !== null) {
+        const surfaceValue = encodedValues.surface[dataIndex];
+        tooltipContent += `Surface: ${String(surfaceValue)}`;
+      } else if (selectedType === 'road_class' && encodedValues.road_class && encodedValues.road_class[dataIndex] !== undefined && 
+                 encodedValues.road_class[dataIndex] !== null) {
+        const roadClassValue = encodedValues.road_class[dataIndex];
+        tooltipContent += `Road Class: ${String(roadClassValue)}`;
+      } else if (selectedType === 'bicycle_infra' && encodedValues.bicycle_infra && encodedValues.bicycle_infra[dataIndex] !== undefined && 
+                 encodedValues.bicycle_infra[dataIndex] !== null) {
+        const bicycleInfraValue = encodedValues.bicycle_infra[dataIndex];
+        // Use description if available, otherwise format the value
+        const description = getBicycleInfraDescription(bicycleInfraValue);
+        if (description) {
+          // Replace <br> with spaces for tooltip (tooltip handles wrapping automatically)
+          const tooltipDescription = description.replace(/<br>/g, ' ');
+          tooltipContent += `Bicycle Infrastructure: ${tooltipDescription}`;
+        } else {
+          // Fallback: replace underscores with spaces
+          const formattedValue = String(bicycleInfraValue).replace(/_/g, ' ');
+          tooltipContent += `Bicycle Infrastructure: ${formattedValue}`;
+        }
+      }
+      
+      // Set tooltip content first (hidden) to measure actual size
+      tooltip.innerHTML = tooltipContent;
+      tooltip.style.visibility = 'hidden';
       tooltip.style.display = 'block';
       
-      // Calculate tooltip position
-      const tooltipWidth = 150; // Approximate tooltip width
-      const tooltipHeight = 60; // Approximate tooltip height
-      const offsetX = 10; // Horizontal offset from cursor
+      // Measure actual tooltip size
+      const tooltipRect = tooltip.getBoundingClientRect();
+      const tooltipWidth = tooltipRect.width;
+      const tooltipHeight = tooltipRect.height;
+      
+      // Calculate tooltip position based on segment midpoint, not mouse position
+      const offsetX = 10; // Horizontal offset from segment midpoint
       const offsetY = -30; // Vertical offset from cursor
       
-      let tooltipLeft = rect.left + x + offsetX;
+      // Use segment midpoint X position for tooltip positioning
+      const tooltipX = segmentMidX;
+      let tooltipLeft = rect.left + tooltipX + offsetX;
       let tooltipTop = rect.top + y + offsetY;
       
       // Check if tooltip goes over right edge of viewport
       if (tooltipLeft + tooltipWidth > window.innerWidth) {
-        // Position tooltip to the left of cursor
-        tooltipLeft = rect.left + x - tooltipWidth - offsetX;
+        // Position tooltip to the left of segment midpoint
+        tooltipLeft = rect.left + tooltipX - tooltipWidth - offsetX;
       }
       
       // Check if tooltip goes over left edge of viewport
@@ -882,33 +1016,7 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
       
       tooltip.style.left = tooltipLeft + 'px';
       tooltip.style.top = tooltipTop + 'px';
-      
-      // Build tooltip content - show distance, elevation, and selected encoded value
-      let tooltipContent = `Distanz: ${(distance / 1000).toFixed(2)} km<br>`;
-      
-      if (elevation !== null && elevation !== undefined) {
-        tooltipContent += `Höhe: ${Math.round(elevation)} m<br>`;
-      }
-      
-      // Add selected encoded value (mapillary_coverage, surface, or road_class)
-      if (selectedType === 'mapillary_coverage' && encodedValues.mapillary_coverage && encodedValues.mapillary_coverage[dataIndex] !== undefined && 
-          encodedValues.mapillary_coverage[dataIndex] !== null) {
-        const customValue = encodedValues.mapillary_coverage[dataIndex];
-        const customPresentText = typeof customValue === 'boolean' 
-          ? (customValue ? 'Ja' : 'Nein') 
-          : String(customValue);
-        tooltipContent += `Mapillary Coverage: ${customPresentText}`;
-      } else if (selectedType === 'surface' && encodedValues.surface && encodedValues.surface[dataIndex] !== undefined && 
-                 encodedValues.surface[dataIndex] !== null) {
-        const surfaceValue = encodedValues.surface[dataIndex];
-        tooltipContent += `Surface: ${String(surfaceValue)}`;
-      } else if (selectedType === 'road_class' && encodedValues.road_class && encodedValues.road_class[dataIndex] !== undefined && 
-                 encodedValues.road_class[dataIndex] !== null) {
-        const roadClassValue = encodedValues.road_class[dataIndex];
-        tooltipContent += `Road Class: ${String(roadClassValue)}`;
-      }
-      
-      tooltip.innerHTML = tooltipContent;
+      tooltip.style.visibility = 'visible';
       
       // Highlight point on route
       if (coord && routeState.mapInstance) {
@@ -940,10 +1048,10 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
           // Clear previous indicator line
           indicatorCtx.clearRect(0, 0, indicatorCanvas.width, indicatorCanvas.height);
           
-          // Calculate the X position based on the actual distance ratio
-          // This ensures the indicator line matches the route position, not just mouse position
-          // Use actualGraphWidth to match the rendered canvas size
-          const indicatorX = padding.left + (clampedRelativeX * actualGraphWidth);
+          // Calculate the X position based on the segment midpoint
+          // This ensures the indicator line matches the segment, not just mouse position
+          // Use segmentMidX which is already calculated relative to padding.left
+          const indicatorX = segmentMidX;
           
           // Draw new indicator line at calculated position
           indicatorCtx.strokeStyle = HEIGHTGRAPH_CONFIG.colors.indicatorLine;
@@ -998,6 +1106,7 @@ function getLabelForEncodedType(type) {
     'road_class': 'Straßenklasse',
     'road_environment': 'Umgebung',
     'road_access': 'Zugang',
+    'bicycle_infra': 'Fahrradinfrastruktur',
     'time': 'Zeit (s)',
     'distance': 'Distanz (m)',
     'street_name': 'Straßenname'
