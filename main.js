@@ -711,16 +711,25 @@ document.addEventListener('DOMContentLoaded', () => {
       
       const routingRect = routingPanel.getBoundingClientRect();
       const viewportHeight = window.innerHeight;
-      const padding = 10;
+      const topPadding = 5; // Padding from top
+      const padding = 5; // Padding between panels
+      const bottomPadding = 5; // Padding from bottom edge
+      
+      // Get attribution control height to avoid overlap
+      const attributionControl = document.querySelector('.maplibregl-ctrl-attrib');
+      const attributionHeight = attributionControl ? attributionControl.offsetHeight : 0;
+      const attributionPadding = attributionHeight > 0 ? 5 : 0; // Extra padding if attribution exists
+      
+      // Calculate available space (accounting for top padding, bottom padding, and attribution)
+      const availableViewportHeight = viewportHeight - topPadding - bottomPadding - attributionHeight - attributionPadding;
       
       // Calculate available space
       const routingNaturalHeight = routingRect.height;
-      const routingMaxHeight = viewportHeight * 0.7; // Max 70% when space is limited
-      const contextMaxHeight = viewportHeight * 0.3; // Max 30% when space is limited
+      const routingMaxHeight = availableViewportHeight * 0.7; // Max 70% of available space
+      const contextMaxHeight = availableViewportHeight * 0.3; // Max 30% of available space
       
       // Check if both panels fit in their natural size
-      const totalNeededHeight = routingNaturalHeight + contextPanel.scrollHeight + padding * 2;
-      const availableViewportHeight = viewportHeight - padding * 2;
+      const totalNeededHeight = routingNaturalHeight + contextPanel.scrollHeight + padding;
       
       let routingActualMaxHeight, contextActualMaxHeight;
       
@@ -730,7 +739,7 @@ document.addEventListener('DOMContentLoaded', () => {
         contextActualMaxHeight = availableViewportHeight - routingNaturalHeight - padding;
       } else {
         // Not enough space: apply limits (routing max 70%, context max 30%)
-        routingActualMaxHeight = `${routingMaxHeight}px`; // Set to 70% of viewport
+        routingActualMaxHeight = `${routingMaxHeight}px`; // Set to 70% of available space
         contextActualMaxHeight = Math.min(contextMaxHeight, availableViewportHeight - routingMaxHeight - padding);
       }
       
@@ -744,11 +753,32 @@ document.addEventListener('DOMContentLoaded', () => {
         const updatedRoutingRect = routingPanel.getBoundingClientRect();
         const routingBottomCalculated = updatedRoutingRect.top + updatedRoutingRect.height;
         
+        // Calculate maximum bottom position (accounting for attribution)
+        const maxBottom = viewportHeight - attributionHeight - attributionPadding - bottomPadding;
+        const contextTop = routingBottomCalculated + padding;
+        const maxContextHeightFromAttribution = Math.max(0, maxBottom - contextTop); // Ensure non-negative
+        
         // Position context panel below routing panel
-        contextPanel.style.top = `${routingBottomCalculated + padding}px`;
-        contextPanel.style.maxHeight = `${Math.max(contextActualMaxHeight, 100)}px`; // Minimum 100px
+        contextPanel.style.top = `${contextTop}px`;
+        
+        // Always respect attribution constraint to avoid overlap
+        // Use the smaller of contextActualMaxHeight and maxContextHeightFromAttribution
+        let finalMaxHeight = Math.min(contextActualMaxHeight, maxContextHeightFromAttribution);
+        
+        // Ensure minimum height of 100px, but always respect attribution constraint first
+        // If attribution constraint allows it, use at least 100px
+        if (maxContextHeightFromAttribution >= 100) {
+          // Attribution constraint allows minimum height
+          finalMaxHeight = Math.max(100, finalMaxHeight);
+        } else {
+          // Attribution constraint is very restrictive: use it even if less than 100px to avoid overlap
+          finalMaxHeight = maxContextHeightFromAttribution;
+        }
+        
+        contextPanel.style.maxHeight = `${finalMaxHeight}px`;
         contextPanel.style.overflowY = 'auto';
         contextPanel.style.bottom = 'auto';
+        contextPanel.style.display = 'block'; // Ensure it's visible
         
         // Reset flag after a short delay to allow for any pending updates
         updateTimeout = setTimeout(() => {

@@ -605,10 +605,10 @@ code {
 /* ───── Routing Panel ───── */
 .routing-panel {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 5px;
+  right: 5px;
   width: 320px;
-  max-width: calc(100% - 20px);
+  max-width: calc(100% - 10px);
   /* max-height is set dynamically in main.js */
   background: white;
   border-radius: 8px;
@@ -1062,13 +1062,46 @@ code {
   display: block;
 }
 
+/* GitHub Links */
+.github-links {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 0 16px 0 16px;
+}
+
+.status-badge {
+  height: 20px;
+  display: block;
+}
+
+.github-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  color: #6b7280;
+  font-size: 12px;
+  transition: color 0.2s;
+  gap: 4px;
+}
+
+.github-link:hover {
+  color: #374151;
+}
+
+.github-link svg {
+  flex-shrink: 0;
+}
+
 /* ───── Context Panel (Bike Lanes) ───── */
 .context-panel {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 5px;
+  right: 5px;
   width: 320px;
-  max-width: calc(100% - 20px);
+  max-width: calc(100% - 10px);
   max-height: calc(100vh - 20px); /* Prevent going outside viewport */
   background: white;
   border-radius: 8px;
@@ -1076,6 +1109,12 @@ code {
   z-index: 1;
   font-family: sans-serif;
   overflow: hidden; /* Let content handle scrolling */
+}
+
+/* Ensure attribution control doesn't overlap with context panel */
+.maplibregl-ctrl-attrib {
+  z-index: 0 !important;
+  pointer-events: auto !important;
 }
 
 /* Position context panel below routing panel using JavaScript */
