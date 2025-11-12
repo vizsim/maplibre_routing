@@ -356,15 +356,18 @@ export function setupRouting(map) {
   setupHeightgraphHandlers();
   
   // Automatically activate start point selection mode on map load
-  routeState.isSelectingStart = true;
-  if (map.getCanvas()) {
-    map.getCanvas().style.cursor = 'crosshair';
-  }
-  
-  // Mark start button as active
-  const startBtn = document.getElementById('set-start');
-  if (startBtn) {
-    startBtn.classList.add('active');
+  // BUT only if no points were loaded from permalink
+  if (!routeState.startPoint && !routeState.endPoint) {
+    routeState.isSelectingStart = true;
+    if (map.getCanvas()) {
+      map.getCanvas().style.cursor = 'crosshair';
+    }
+    
+    // Mark start button as active
+    const startBtn = document.getElementById('set-start');
+    if (startBtn) {
+      startBtn.classList.add('active');
+    }
   }
 }
 
