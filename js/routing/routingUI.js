@@ -192,6 +192,74 @@ export function setupUIHandlers(map) {
     // Define slider values with custom steps
     const sliderValues = [0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.6, 1.0];
     
+    let sliderTimeout = null;
+    let sliderMaxTimeout = null;
+    let sliderStartTime = null;
+    let pendingRecalculation = false;
+    
+    let retryInterval = null;
+    
+    const triggerRouteRecalculation = async () => {
+      if (!pendingRecalculation || !routeState.startPoint || !routeState.endPoint) {
+        return;
+      }
+      
+      const { calculateRoute, isRouteCalculationInProgress } = await import('./routing.js');
+      
+      // Try to calculate route
+      calculateRoute(map, routeState.startPoint, routeState.endPoint);
+      
+      // Check if calculation was accepted (started) or ignored
+      setTimeout(() => {
+        if (isRouteCalculationInProgress()) {
+          // Calculation was accepted and is in progress
+          if (retryInterval) {
+            clearInterval(retryInterval);
+            retryInterval = null;
+          }
+          pendingRecalculation = false;
+          sliderStartTime = null;
+        } else if (pendingRecalculation) {
+          // Calculation was ignored, check if we need to start retry mechanism
+          const elapsed = sliderStartTime ? Date.now() - sliderStartTime : 0;
+          if (elapsed >= 1000 && !retryInterval) {
+            // After 1 second, start retry mechanism
+            retryInterval = setInterval(() => {
+              if (!pendingRecalculation) {
+                clearInterval(retryInterval);
+                retryInterval = null;
+                return;
+              }
+              
+              // Try to calculate route
+              calculateRoute(map, routeState.startPoint, routeState.endPoint);
+              
+              // Check if calculation started
+              setTimeout(() => {
+                if (isRouteCalculationInProgress()) {
+                  // Calculation started successfully
+                  clearInterval(retryInterval);
+                  retryInterval = null;
+                  pendingRecalculation = false;
+                  sliderStartTime = null;
+                } else {
+                  // Still not started, check if we should stop retrying
+                  const totalElapsed = sliderStartTime ? Date.now() - sliderStartTime : 0;
+                  if (totalElapsed > 2000) {
+                    // Stop retrying after 2 seconds total
+                    clearInterval(retryInterval);
+                    retryInterval = null;
+                    pendingRecalculation = false;
+                    sliderStartTime = null;
+                  }
+                }
+              }, 50);
+            }, 100);
+          }
+        }
+      }, 100);
+    };
+    
     mapillarySlider.addEventListener('input', (e) => {
       const index = parseInt(e.target.value);
       const value = sliderValues[index];
@@ -205,12 +273,30 @@ export function setupUIHandlers(map) {
       // Update customModel if car_customizable is selected
       if (supportsCustomModel(routeState.selectedProfile) && routeState.customModel) {
         updateMapillaryPriority(routeState.customModel, value);
+        pendingRecalculation = true;
         
-        // Recalculate route if both points are set
-        if (routeState.startPoint && routeState.endPoint) {
-          import('./routing.js').then(({ calculateRoute }) => {
-            calculateRoute(map, routeState.startPoint, routeState.endPoint);
-          });
+        // Track when slider movement started
+        if (!sliderStartTime) {
+          sliderStartTime = Date.now();
+        }
+        
+        // Clear existing debounce timeout
+        if (sliderTimeout) {
+          clearTimeout(sliderTimeout);
+        }
+        
+        // Debounce: wait 300ms after last change before recalculating
+        sliderTimeout = setTimeout(() => {
+          triggerRouteRecalculation();
+          sliderTimeout = null;
+        }, 300);
+        
+        // Maximum timeout: ensure recalculation happens after 1 second from first change
+        if (!sliderMaxTimeout) {
+          sliderMaxTimeout = setTimeout(() => {
+            triggerRouteRecalculation();
+            sliderMaxTimeout = null;
+          }, 1000);
         }
       }
     });

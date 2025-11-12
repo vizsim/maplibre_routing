@@ -18,6 +18,10 @@ const GRAPHHOPPER_URL = 'http://localhost:8989';
 // Flag to prevent parallel route calculations
 let routeCalculationInProgress = false;
 
+export function isRouteCalculationInProgress() {
+  return routeCalculationInProgress;
+}
+
 // Validate coordinates before route calculation
 function validateCoordinates(coord, name) {
   if (!Array.isArray(coord) || coord.length < 2) {
