@@ -6,8 +6,8 @@ import { setupUIHandlers } from './routingUI.js';
 import { setupHeightgraphHandlers, drawHeightgraph, cleanupHeightgraphHandlers } from './heightgraph.js';
 import { setupRouteHover, updateRouteColor } from './routeVisualization.js';
 
-// const GRAPHHOPPER_URL = 'http://localhost:8989';
-const GRAPHHOPPER_URL = 'https://ghroute.duckdns.org';
+ const GRAPHHOPPER_URL = 'http://localhost:8989';
+// const GRAPHHOPPER_URL = 'https://ghroute.duckdns.org';
 
 
 
@@ -161,60 +161,121 @@ export async function calculateRoute(map, start, end) {
   try {
     // GraphHopper API call - request GeoJSON format with points_encoded=false and elevation data
     // GraphHopper expects point as lat,lng
-    // Request details - format: details=surface&details=mapillary_coverage (multiple parameters)
-    // or details=surface,mapillary_coverage (comma-separated)
-    const baseUrl = `${GRAPHHOPPER_URL}/route?point=${start[1]},${start[0]}&point=${end[1]},${end[0]}&profile=${routeState.selectedProfile}&points_encoded=false&elevation=true`;
+    let profileParam = routeState.selectedProfile;
     
-    // Try different formats for requesting details
-    // Format 1: Multiple detail parameters (as GraphHopper web UI might use)
-    const detailsParams = ['surface', 'mapillary_coverage', 'road_class', 'road_access']
-      .map(d => `details=${d}`)
-      .join('&');
-    const url = `${baseUrl}&${detailsParams}&type=json`;
-    
-    console.log('Requesting route with URL:', url);
-    
-    let response;
-    try {
-      response = await fetch(url);
-    } catch (error) {
-      // Network error (server not running, CORS, etc.)
-      console.error('Network error fetching route:', error);
-      throw new Error(`Network error: ${error.message}. Make sure GraphHopper is running on ${GRAPHHOPPER_URL}`);
+    // For car_customizable profile, use 'car' as profile and add custom_model parameter
+    if (routeState.selectedProfile === 'car_customizable') {
+      profileParam = 'car';
     }
     
-    // If details request fails, try comma-separated format
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.warn('Details request failed with multiple params, trying comma-separated:', errorText);
+    // Ensure customModel is set for car_customizable profile
+    if (routeState.selectedProfile === 'car_customizable' && !routeState.customModel) {
+      routeState.customModel = JSON.parse(JSON.stringify(routeState.defaultCustomModel));
+      console.log('Set default customModel for car_customizable profile');
+    }
+    
+    // Use POST with JSON body if custom_model is present (like /maps UI does)
+    // Otherwise use GET with URL parameters
+    const hasCustomModel = routeState.selectedProfile === 'car_customizable' && routeState.customModel;
+    let response;
+    
+    if (hasCustomModel) {
+      // POST request with JSON body (like /maps UI)
+      // GraphHopper expects points as [lng, lat] arrays (same as GeoJSON format)
+      const requestBody = {
+        points: [[start[0], start[1]], [end[0], end[1]]], // [lng, lat] format
+        profile: profileParam,
+        points_encoded: false,
+        elevation: true,
+        details: ['surface', 'mapillary_coverage', 'road_class', 'road_access'],
+        custom_model: routeState.customModel
+      };
       
-      // Format 2: Comma-separated
-      const detailsComma = ['surface', 'mapillary_coverage', 'road_class', 'road_access'].join(',');
-      const urlComma = `${baseUrl}&details=${detailsComma}&type=json`;
+      // Add ch.disable for car profile
+      if (profileParam === 'car') {
+        requestBody['ch.disable'] = true;
+      }
+      
+      console.log('Requesting route with POST (custom_model):', `${GRAPHHOPPER_URL}/route`, requestBody);
+      
       try {
-        response = await fetch(urlComma);
+        response = await fetch(`${GRAPHHOPPER_URL}/route`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(requestBody)
+        });
       } catch (error) {
-        console.error('Network error fetching route (comma-separated):', error);
+        console.error('Network error fetching route (POST):', error);
+        throw new Error(`Network error: ${error.message}. Make sure GraphHopper is running on ${GRAPHHOPPER_URL}`);
+      }
+    } else {
+      // GET request with URL parameters (original method)
+      const baseUrl = `${GRAPHHOPPER_URL}/route?point=${start[1]},${start[0]}&point=${end[1]},${end[0]}&profile=${profileParam}&points_encoded=false&elevation=true`;
+      
+      // Add ch.disable=true for car profile (since car is now LM and CH routing doesn't work)
+      let chDisableParam = '';
+      if (profileParam === 'car') {
+        chDisableParam = '&ch.disable=true';
+      }
+      
+      // Try different formats for requesting details
+      // Format 1: Multiple detail parameters (as GraphHopper web UI might use)
+      const detailsParams = ['surface', 'mapillary_coverage', 'road_class', 'road_access']
+        .map(d => `details=${d}`)
+        .join('&');
+      const url = `${baseUrl}${chDisableParam}&${detailsParams}&type=json`;
+      
+      console.log('Requesting route with GET URL:', url);
+      
+      try {
+        response = await fetch(url);
+      } catch (error) {
+        // Network error (server not running, CORS, etc.)
+        console.error('Network error fetching route:', error);
         throw new Error(`Network error: ${error.message}. Make sure GraphHopper is running on ${GRAPHHOPPER_URL}`);
       }
       
-      // If still fails, try without details
+      // If details request fails, try comma-separated format
       if (!response.ok) {
-        const errorText2 = await response.text();
-        console.warn('Details request failed with comma-separated, trying without details:', errorText2);
-        const urlNoDetails = `${baseUrl}&type=json`;
+        const errorText = await response.text();
+        console.warn('Details request failed with multiple params, trying comma-separated:', errorText);
+        
+        // Format 2: Comma-separated
+        const detailsComma = ['surface', 'mapillary_coverage', 'road_class', 'road_access'].join(',');
+        const urlComma = `${baseUrl}${chDisableParam}&details=${detailsComma}&type=json`;
         try {
-          response = await fetch(urlNoDetails);
+          response = await fetch(urlComma);
         } catch (error) {
-          console.error('Network error fetching route (no details):', error);
+          console.error('Network error fetching route (comma-separated):', error);
           throw new Error(`Network error: ${error.message}. Make sure GraphHopper is running on ${GRAPHHOPPER_URL}`);
         }
         
+        // If still fails, try without details
         if (!response.ok) {
-          const errorText3 = await response.text();
-          throw new Error(`HTTP error! status: ${response.status}, message: ${errorText3}`);
+          const errorText2 = await response.text();
+          console.warn('Details request failed with comma-separated, trying without details:', errorText2);
+          const urlNoDetails = `${baseUrl}${chDisableParam}&type=json`;
+          try {
+            response = await fetch(urlNoDetails);
+          } catch (error) {
+            console.error('Network error fetching route (no details):', error);
+            throw new Error(`Network error: ${error.message}. Make sure GraphHopper is running on ${GRAPHHOPPER_URL}`);
+          }
+          
+          if (!response.ok) {
+            const errorText3 = await response.text();
+            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText3}`);
+          }
         }
       }
+    }
+    
+    // Check if POST request failed
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
     }
     
     const data = await response.json();

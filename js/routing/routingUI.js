@@ -22,6 +22,42 @@ export function setupUIHandlers(map) {
       btn.classList.add('active');
       // Update selected profile
       routeState.selectedProfile = btn.dataset.profile;
+      
+      // Set default custom model if car_customizable is selected and no custom model is set
+      if (routeState.selectedProfile === 'car_customizable' && !routeState.customModel) {
+        routeState.customModel = JSON.parse(JSON.stringify(routeState.defaultCustomModel));
+      }
+      
+      // Show/hide customizable slider
+      const sliderContainer = document.getElementById('customizable-slider-container');
+      if (sliderContainer) {
+        if (routeState.selectedProfile === 'car_customizable') {
+          sliderContainer.style.display = 'block';
+          // Initialize slider value from customModel
+          if (routeState.customModel && routeState.customModel.priority) {
+            const mapillaryRule = routeState.customModel.priority.find(r => r.if && r.if.includes('mapillary_coverage==true'));
+            if (mapillaryRule && mapillaryRule.multiply_by !== undefined) {
+              const slider = document.getElementById('mapillary-priority-slider');
+              const sliderValue = document.getElementById('slider-value');
+              if (slider) {
+                // Map the multiply_by value to slider index
+                const sliderValues = [0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.6, 1.0];
+                const index = sliderValues.findIndex(v => Math.abs(v - mapillaryRule.multiply_by) < 0.001);
+                if (index !== -1) {
+                  slider.value = index;
+                  if (sliderValue) {
+                    const inverseValue = (1 / mapillaryRule.multiply_by).toFixed(0);
+                    sliderValue.textContent = `${mapillaryRule.multiply_by.toFixed(2)} (×${inverseValue})`;
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          sliderContainer.style.display = 'none';
+        }
+      }
+      
       // Update route color based on profile
       updateRouteColorByProfile(map, routeState.selectedProfile);
       
@@ -142,6 +178,49 @@ export function setupUIHandlers(map) {
   if (exportGpxBtn) {
     exportGpxBtn.addEventListener('click', () => {
       exportRouteToGPX();
+    });
+  }
+  
+  // Mapillary priority slider for car_customizable profile
+  const mapillarySlider = document.getElementById('mapillary-priority-slider');
+  const sliderValueDisplay = document.getElementById('slider-value');
+  if (mapillarySlider) {
+    // Define slider values with custom steps
+    const sliderValues = [0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.6, 1.0];
+    
+    mapillarySlider.addEventListener('input', (e) => {
+      const index = parseInt(e.target.value);
+      const value = sliderValues[index];
+      
+      if (sliderValueDisplay) {
+        // Show inverse value to make it more intuitive (smaller multiply_by = higher priority)
+        const inverseValue = (1 / value).toFixed(0);
+        sliderValueDisplay.textContent = `${value.toFixed(2)} (×${inverseValue})`;
+      }
+      
+      // Update customModel if car_customizable is selected
+      if (routeState.selectedProfile === 'car_customizable' && routeState.customModel) {
+        // Ensure customModel exists
+        if (!routeState.customModel.priority) {
+          routeState.customModel.priority = [];
+        }
+        
+        // Find or create mapillary_coverage==true rule
+        let mapillaryRule = routeState.customModel.priority.find(r => r.if && r.if.includes('mapillary_coverage==true'));
+        if (!mapillaryRule) {
+          mapillaryRule = {"if": "mapillary_coverage==true", "multiply_by": value};
+          routeState.customModel.priority.push(mapillaryRule);
+        } else {
+          mapillaryRule.multiply_by = value;
+        }
+        
+        // Recalculate route if both points are set
+        if (routeState.startPoint && routeState.endPoint) {
+          import('./routing.js').then(({ calculateRoute }) => {
+            calculateRoute(map, routeState.startPoint, routeState.endPoint);
+          });
+        }
+      }
     });
   }
 
