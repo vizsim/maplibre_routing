@@ -5,11 +5,15 @@ import { routeState } from './routeState.js';
 import { setupUIHandlers } from './routingUI.js';
 import { setupHeightgraphHandlers, drawHeightgraph, cleanupHeightgraphHandlers } from './heightgraph.js';
 import { setupRouteHover, updateRouteColor } from './routeVisualization.js';
+import {
+  supportsCustomModel,
+  getGraphHopperProfile,
+  ensureCustomModel,
+  buildPostRequestBodyWithCustomModel
+} from './customModel.js';
 
- const GRAPHHOPPER_URL = 'http://localhost:8989';
-// const GRAPHHOPPER_URL = 'https://ghroute.duckdns.org';
-
-
+// const GRAPHHOPPER_URL = 'http://localhost:8989';
+const GRAPHHOPPER_URL = 'https://ghroute.duckdns.org';
 
 // Flag to prevent parallel route calculations
 let routeCalculationInProgress = false;
@@ -31,6 +35,228 @@ function validateCoordinates(coord, name) {
   }
 }
 
+// Get profile parameter (car_customizable -> car)
+function getProfileParam() {
+  return getGraphHopperProfile(routeState.selectedProfile);
+}
+
+// Build GET request URL for route calculation
+function buildGetRequestUrl(start, end, profileParam) {
+  const baseUrl = `${GRAPHHOPPER_URL}/route?point=${start[1]},${start[0]}&point=${end[1]},${end[0]}&profile=${profileParam}&points_encoded=false&elevation=true`;
+  const chDisableParam = profileParam === 'car' ? '&ch.disable=true' : '';
+  const detailsParams = ['surface', 'mapillary_coverage', 'road_class', 'road_access']
+    .map(d => `details=${d}`)
+    .join('&');
+  return `${baseUrl}${chDisableParam}&${detailsParams}&type=json`;
+}
+
+// Fetch route with GET request (with fallback for details format)
+async function fetchRouteGet(url) {
+  try {
+    let response = await fetch(url);
+    if (response.ok) return response;
+    
+    // Try comma-separated details format
+    const urlComma = url.replace(/details=[^&]+/g, 'details=' + ['surface', 'mapillary_coverage', 'road_class', 'road_access'].join(','));
+    response = await fetch(urlComma);
+    if (response.ok) return response;
+    
+    // Try without details
+    const urlNoDetails = url.replace(/&details=[^&]+/g, '').replace(/details=[^&]+&/g, '');
+    response = await fetch(urlNoDetails);
+    return response;
+  } catch (error) {
+    throw new Error(`Network error: ${error.message}. Make sure GraphHopper is running on ${GRAPHHOPPER_URL}`);
+  }
+}
+
+// Extract coordinates from GraphHopper response
+function extractCoordinates(path) {
+  if (path.points && path.points.coordinates) {
+    return path.points.coordinates;
+  } else if (path.points && path.points.geometry && path.points.geometry.coordinates) {
+    return path.points.geometry.coordinates;
+  }
+  throw new Error('Route points format not recognized. Response: ' + JSON.stringify(path).substring(0, 200));
+}
+
+// Normalize coordinates to [lng, lat] format
+function normalizeCoordinates(coordinates) {
+  return coordinates.map(coord => {
+    if (Array.isArray(coord) && coord.length >= 2) {
+      // If first value is <= 90, it's likely latitude - swap to [lng, lat]
+      if (Math.abs(coord[0]) <= 90 && Math.abs(coord[1]) > 90) {
+        return [coord[1], coord[0]];
+      }
+      return [coord[0], coord[1]];
+    }
+    return coord;
+  });
+}
+
+// Extract elevation data from path
+function extractElevation(path, coordinates) {
+  let elevations = [];
+  let hasElevation = false;
+  
+  // Check if coordinates include elevation (3rd value)
+  if (coordinates.length > 0 && coordinates[0].length >= 3) {
+    elevations = coordinates.map(coord => coord[2] || null);
+    hasElevation = elevations.some(e => e !== null);
+    // Remove elevation from coordinates for MapLibre
+    coordinates = coordinates.map(coord => [coord[0], coord[1]]);
+  } else if (path.points && path.points.elevation) {
+    elevations = path.points.elevation;
+    hasElevation = elevations && elevations.length > 0;
+  } else if (path.elevation) {
+    elevations = path.elevation;
+    hasElevation = elevations && elevations.length > 0;
+  }
+  
+  return { elevations, hasElevation, coordinates };
+}
+
+// Map detail arrays to coordinate arrays
+function mapDetailsToCoordinates(detailArray, coordinatesLength) {
+  if (!detailArray || !Array.isArray(detailArray)) return null;
+  
+  const result = new Array(coordinatesLength).fill(null);
+  detailArray.forEach(([startIdx, endIdx, value]) => {
+    if (typeof startIdx === 'number' && typeof endIdx === 'number') {
+      for (let i = startIdx; i <= endIdx && i < coordinatesLength; i++) {
+        result[i] = value;
+      }
+    }
+  });
+  return result;
+}
+
+// Extract encoded values (details) from path
+function extractEncodedValues(path, coordinates) {
+  const encodedValues = {};
+  
+  // Extract from path.details
+  if (path.details && Object.keys(path.details).length > 0) {
+    Object.keys(path.details).forEach(detailKey => {
+      const detailArray = path.details[detailKey];
+      if (Array.isArray(detailArray) && detailArray.length > 0) {
+        encodedValues[detailKey] = mapDetailsToCoordinates(detailArray, coordinates.length);
+      }
+    });
+  }
+  
+  // Extract from instructions
+  if (path.instructions && path.instructions.length > 0) {
+    const timeArray = new Array(coordinates.length).fill(0);
+    const distanceArray = new Array(coordinates.length).fill(0);
+    const streetNameArray = new Array(coordinates.length).fill('');
+    const mapillaryArray = new Array(coordinates.length).fill(null);
+    
+    path.instructions.forEach((inst) => {
+      if (inst.interval && Array.isArray(inst.interval) && inst.interval.length === 2) {
+        const [startIdx, endIdx] = inst.interval;
+        for (let i = startIdx; i <= endIdx && i < coordinates.length; i++) {
+          timeArray[i] = inst.time || 0;
+          distanceArray[i] = inst.distance || 0;
+          streetNameArray[i] = inst.street_name || '';
+          if (inst.mapillary_coverage !== undefined) {
+            mapillaryArray[i] = inst.mapillary_coverage;
+          }
+        }
+      }
+    });
+    
+    encodedValues.time = timeArray;
+    encodedValues.distance = distanceArray;
+    encodedValues.street_name = streetNameArray;
+    if (mapillaryArray.some(v => v !== null)) {
+      encodedValues.mapillary_coverage = mapillaryArray;
+    }
+  }
+  
+  return encodedValues;
+}
+
+// Format time display
+function formatTime(timeSeconds) {
+  const timeMinutes = Math.round(timeSeconds / 60);
+  const timeHours = Math.floor(timeMinutes / 60);
+  const timeMins = timeMinutes % 60;
+  
+  if (timeHours > 0) {
+    return `${timeHours}h ${timeMins}min`;
+  }
+  return `${timeMinutes} min`;
+}
+
+// Generate route info HTML
+function generateRouteInfoHTML(path) {
+  const distance = (path.distance / 1000).toFixed(2);
+  const timeSeconds = Math.round(path.time / 1000);
+  const timeDisplay = formatTime(timeSeconds);
+  
+  const avgSpeed = timeSeconds > 0 
+    ? (path.distance / 1000 / (path.time / 1000 / 3600)).toFixed(1)
+    : '0.0';
+  
+  const ascend = path.ascend ? Math.round(path.ascend) : null;
+  const descend = path.descend ? Math.round(path.descend) : null;
+  const instructionCount = path.instructions ? path.instructions.length : null;
+  const weight = path.weight ? path.weight.toFixed(2) : null;
+  
+  return `
+    <div class="route-info-compact">
+      <div class="route-info-row">
+        <svg width="16" height="16" viewBox="0 0 179 179" fill="currentColor">
+          <polygon points="52.258,67.769 52.264,37.224 0,89.506 52.264,141.782 52.258,111.237 126.736,111.249 126.736,141.782 179.006,89.506 126.736,37.224 126.736,67.769"/>
+        </svg>
+        <span class="route-info-compact-value">${distance} km</span>
+      </div>
+      <div class="route-info-row">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+        <span class="route-info-compact-value">${timeDisplay}</span>
+      </div>
+      <div class="route-info-row">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12,2A10,10,0,1,0,22,12,10.011,10.011,0,0,0,12,2Zm7.411,13H12.659L9.919,8.606a1,1,0,1,0-1.838.788L10.484,15H4.589a8,8,0,1,1,14.822,0Z"/>
+        </svg>
+        <span class="route-info-compact-label">Ø:</span>
+        <span class="route-info-compact-value">${avgSpeed} km/h</span>
+      </div>
+      ${(ascend !== null || descend !== null) ? `
+      <div class="route-info-row">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 14L17 9L22 18H2.84444C2.46441 18 2.2233 17.5928 2.40603 17.2596L10.0509 3.31896C10.2429 2.96885 10.7476 2.97394 10.9325 3.32786L15.122 11.3476"/>
+        </svg>
+        <span class="route-info-compact-value">
+          ${ascend !== null ? `↑ ${ascend} m` : ''}
+          ${ascend !== null && descend !== null ? ' ' : ''}
+          ${descend !== null ? `↓ ${descend} m` : ''}
+        </span>
+      </div>
+      ` : ''}
+      ${instructionCount !== null ? `
+      <div class="route-info-row">
+        <svg width="16" height="16" viewBox="0 0 403.262 460.531" fill="currentColor">
+          <path d="M403.262,254.156v206.375h-70.628V254.156c0-32.26-8.411-56.187-25.718-73.16c-24.636-24.166-60.904-27.919-71.934-28.469 h-50.747l29.09,73.648c0.979,2.468,0.187,5.284-1.927,6.88c-2.116,1.604-5.048,1.593-7.152-0.03L59.574,121.797 c-1.445-1.126-2.305-2.84-2.305-4.678c0-1.835,0.86-3.561,2.305-4.672L204.246,1.218c1.064-0.819,2.323-1.218,3.6-1.218 c1.247,0,2.494,0.387,3.552,1.185c2.119,1.593,2.905,4.413,1.927,6.889l-29.09,73.642l37.442,0.109c0,0,3.588,0.198,8.565,0.624 l-0.018-0.63c3.174-0.067,75.568-0.859,126.153,48.761C387.492,161.092,403.262,202.665,403.262,254.156z"/>
+        </svg>
+        <span class="route-info-compact-label">turns:</span>
+        <span class="route-info-compact-value">${instructionCount}</span>
+      </div>
+      ` : ''}
+      ${weight !== null ? `
+      <div class="route-info-row">
+        <span class="route-info-compact-label">Weight:</span>
+        <span class="route-info-compact-value">${weight}</span>
+      </div>
+      ` : ''}
+    </div>
+  `;
+}
+
 export function setupRouting(map) {
   routeState.init(map);
   
@@ -45,17 +271,6 @@ export function setupRouting(map) {
     });
   }
 
-  // Create source for hover buffer (highlight segment on hover)
-  if (!map.getSource('route-hover-buffer')) {
-    map.addSource('route-hover-buffer', {
-      type: 'geojson',
-      data: {
-        type: 'FeatureCollection',
-        features: []
-      }
-    });
-  }
-  
   // Create source for heightgraph hover point (point on route line)
   if (!map.getSource('heightgraph-hover-point')) {
     map.addSource('heightgraph-hover-point', {
@@ -81,24 +296,6 @@ export function setupRouting(map) {
         'line-color': '#3b82f6',
         'line-width': 5,
         'line-opacity': 0.8
-      }
-    });
-  }
-  
-  // Create layer for hover buffer (red highlight on hover)
-  if (!map.getLayer('route-hover-buffer-layer')) {
-    map.addLayer({
-      id: 'route-hover-buffer-layer',
-      type: 'line',
-      source: 'route-hover-buffer',
-      layout: {
-        'line-join': 'round',
-        'line-cap': 'round'
-      },
-      paint: {
-        'line-color': '#ef4444',
-        'line-width': 12,
-        'line-opacity': 0.6
       }
     });
   }
@@ -159,120 +356,43 @@ export async function calculateRoute(map, start, end) {
   }
 
   try {
-    // GraphHopper API call - request GeoJSON format with points_encoded=false and elevation data
-    // GraphHopper expects point as lat,lng
-    let profileParam = routeState.selectedProfile;
+    // Prepare profile and custom model
+    const profileParam = getProfileParam();
     
-    // For car_customizable profile, use 'car' as profile and add custom_model parameter
-    if (routeState.selectedProfile === 'car_customizable') {
-      profileParam = 'car';
+    // Ensure custom model is initialized if needed
+    if (supportsCustomModel(routeState.selectedProfile)) {
+      routeState.customModel = ensureCustomModel(routeState.customModel);
     }
     
-    // Ensure customModel is set for car_customizable profile
-    if (routeState.selectedProfile === 'car_customizable' && !routeState.customModel) {
-      routeState.customModel = JSON.parse(JSON.stringify(routeState.defaultCustomModel));
-      console.log('Set default customModel for car_customizable profile');
-    }
-    
-    // Use POST with JSON body if custom_model is present (like /maps UI does)
-    // Otherwise use GET with URL parameters
-    const hasCustomModel = routeState.selectedProfile === 'car_customizable' && routeState.customModel;
+    // Fetch route from GraphHopper API
+    const hasCustomModel = supportsCustomModel(routeState.selectedProfile) && routeState.customModel;
     let response;
     
     if (hasCustomModel) {
-      // POST request with JSON body (like /maps UI)
-      // GraphHopper expects points as [lng, lat] arrays (same as GeoJSON format)
-      const requestBody = {
-        points: [[start[0], start[1]], [end[0], end[1]]], // [lng, lat] format
-        profile: profileParam,
-        points_encoded: false,
-        elevation: true,
-        details: ['surface', 'mapillary_coverage', 'road_class', 'road_access'],
-        custom_model: routeState.customModel
-      };
-      
-      // Add ch.disable for car profile
-      if (profileParam === 'car') {
-        requestBody['ch.disable'] = true;
-      }
-      
-      console.log('Requesting route with POST (custom_model):', `${GRAPHHOPPER_URL}/route`, requestBody);
+      // POST request with JSON body
+      const requestBody = buildPostRequestBodyWithCustomModel(
+        start,
+        end,
+        routeState.selectedProfile,
+        routeState.customModel
+      );
       
       try {
         response = await fetch(`${GRAPHHOPPER_URL}/route`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody)
         });
       } catch (error) {
-        console.error('Network error fetching route (POST):', error);
         throw new Error(`Network error: ${error.message}. Make sure GraphHopper is running on ${GRAPHHOPPER_URL}`);
       }
     } else {
-      // GET request with URL parameters (original method)
-      const baseUrl = `${GRAPHHOPPER_URL}/route?point=${start[1]},${start[0]}&point=${end[1]},${end[0]}&profile=${profileParam}&points_encoded=false&elevation=true`;
-      
-      // Add ch.disable=true for car profile (since car is now LM and CH routing doesn't work)
-      let chDisableParam = '';
-      if (profileParam === 'car') {
-        chDisableParam = '&ch.disable=true';
-      }
-      
-      // Try different formats for requesting details
-      // Format 1: Multiple detail parameters (as GraphHopper web UI might use)
-      const detailsParams = ['surface', 'mapillary_coverage', 'road_class', 'road_access']
-        .map(d => `details=${d}`)
-        .join('&');
-      const url = `${baseUrl}${chDisableParam}&${detailsParams}&type=json`;
-      
-      console.log('Requesting route with GET URL:', url);
-      
-      try {
-        response = await fetch(url);
-      } catch (error) {
-        // Network error (server not running, CORS, etc.)
-        console.error('Network error fetching route:', error);
-        throw new Error(`Network error: ${error.message}. Make sure GraphHopper is running on ${GRAPHHOPPER_URL}`);
-      }
-      
-      // If details request fails, try comma-separated format
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.warn('Details request failed with multiple params, trying comma-separated:', errorText);
-        
-        // Format 2: Comma-separated
-        const detailsComma = ['surface', 'mapillary_coverage', 'road_class', 'road_access'].join(',');
-        const urlComma = `${baseUrl}${chDisableParam}&details=${detailsComma}&type=json`;
-        try {
-          response = await fetch(urlComma);
-        } catch (error) {
-          console.error('Network error fetching route (comma-separated):', error);
-          throw new Error(`Network error: ${error.message}. Make sure GraphHopper is running on ${GRAPHHOPPER_URL}`);
-        }
-        
-        // If still fails, try without details
-        if (!response.ok) {
-          const errorText2 = await response.text();
-          console.warn('Details request failed with comma-separated, trying without details:', errorText2);
-          const urlNoDetails = `${baseUrl}${chDisableParam}&type=json`;
-          try {
-            response = await fetch(urlNoDetails);
-          } catch (error) {
-            console.error('Network error fetching route (no details):', error);
-            throw new Error(`Network error: ${error.message}. Make sure GraphHopper is running on ${GRAPHHOPPER_URL}`);
-          }
-          
-          if (!response.ok) {
-            const errorText3 = await response.text();
-            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText3}`);
-          }
-        }
-      }
+      // GET request with URL parameters
+      const url = buildGetRequestUrl(start, end, profileParam);
+      response = await fetchRouteGet(url);
     }
     
-    // Check if POST request failed
+    // Check response status
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
@@ -280,12 +400,8 @@ export async function calculateRoute(map, start, end) {
     
     const data = await response.json();
     
-    // Debug: Log full response to see what's available
-    console.log('GraphHopper API Response:', data);
     if (data.paths && data.paths.length > 0) {
       const path = data.paths[0];
-      console.log('Path data:', path);
-      console.log('Available path fields:', Object.keys(path));
       let coordinates = [];
       
       // GraphHopper with points_encoded=false returns coordinates in the points.geometry.coordinates array
@@ -337,8 +453,6 @@ export async function calculateRoute(map, start, end) {
         return coord;
       });
       
-      console.log('Elevation data:', { hasElevation, elevationCount: elevations.length, sample: elevations.slice(0, 5) });
-      
       // Extract encoded values (details) if available
       // GraphHopper returns details as arrays: [[startIdx, endIdx, value], ...]
       const encodedValues = {};
@@ -359,16 +473,12 @@ export async function calculateRoute(map, start, end) {
       };
       
       if (path.details && Object.keys(path.details).length > 0) {
-        console.log('Path details structure:', path.details);
-        console.log('Available detail keys:', Object.keys(path.details));
-        
         // Map detail arrays to coordinate arrays for all available details
         // GraphHopper returns details as: [[startIdx, endIdx, value], ...]
         Object.keys(path.details).forEach(detailKey => {
           const detailArray = path.details[detailKey];
           if (Array.isArray(detailArray) && detailArray.length > 0) {
             encodedValues[detailKey] = mapDetailsToCoordinates(detailArray, coordinates.length);
-            console.log(`Mapped ${detailKey}:`, encodedValues[detailKey].filter(v => v !== null).length, 'non-null values');
           }
         });
         
@@ -383,9 +493,6 @@ export async function calculateRoute(map, start, end) {
       
       // Extract data from instructions - they contain per-segment information
       if (path.instructions && path.instructions.length > 0) {
-        console.log('Instructions sample:', path.instructions[0]);
-        console.log('All instruction keys:', Object.keys(path.instructions[0]));
-        
         // Map instruction data to coordinates using intervals
         const timeArray = new Array(coordinates.length).fill(0);
         const distanceArray = new Array(coordinates.length).fill(0);
@@ -416,39 +523,7 @@ export async function calculateRoute(map, start, end) {
         if (customPresentArray.some(v => v !== null)) {
           encodedValues.mapillary_coverage = customPresentArray;
         }
-        
-        console.log('Extracted from instructions:', {
-          timeSample: timeArray.slice(0, 10),
-          distanceSample: distanceArray.slice(0, 10),
-          streetNameSample: streetNameArray.slice(0, 10),
-          totalInstructions: path.instructions.length
-        });
       }
-      
-      // Log all available data for debugging
-      console.log('=== GraphHopper Available Data ===');
-      console.log('Path details object:', path.details);
-      console.log('Path details keys:', path.details ? Object.keys(path.details) : 'No details object');
-      
-      // Log instruction fields
-      if (path.instructions && path.instructions.length > 0) {
-        console.log('Instruction fields available:', Object.keys(path.instructions[0]));
-        console.log('Sample instruction:', path.instructions[0]);
-      }
-      
-      // Log what we extracted
-      console.log('Extracted encoded values:', Object.keys(encodedValues).filter(k => encodedValues[k] && encodedValues[k].length > 0));
-      console.log('Encoded values details:', {
-        time: encodedValues.time ? `${encodedValues.time.length} values` : 'not available',
-        distance: encodedValues.distance ? `${encodedValues.distance.length} values` : 'not available',
-        street_name: encodedValues.street_name ? `${encodedValues.street_name.length} values` : 'not available',
-        surface: encodedValues.surface ? `${encodedValues.surface.length} values` : 'not available',
-        mapillary_coverage: encodedValues.mapillary_coverage ? `${encodedValues.mapillary_coverage.length} values` : 'not available',
-        road_class: encodedValues.road_class ? `${encodedValues.road_class.length} values` : 'not available',
-        road_environment: encodedValues.road_environment ? `${encodedValues.road_environment.length} values` : 'not available',
-        road_access: encodedValues.road_access ? `${encodedValues.road_access.length} values` : 'not available'
-      });
-      console.log('===================================');
       
       // Update route layer - will be colored by updateRouteColor based on selected encoded value
       // Initially set as single feature, will be updated by updateRouteColor
@@ -630,16 +705,6 @@ export function clearRoute(map) {
     type: 'FeatureCollection',
     features: []
   });
-  
-  // Clear mapillary_coverage layer
-  
-  // Clear hover buffer layer
-  if (map.getSource('route-hover-buffer')) {
-    map.getSource('route-hover-buffer').setData({
-      type: 'FeatureCollection',
-      features: []
-    });
-  }
   
   // Clear heightgraph hover point
   if (map.getSource('heightgraph-hover-point')) {

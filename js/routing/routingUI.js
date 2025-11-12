@@ -3,6 +3,12 @@
 import { routeState } from './routeState.js';
 import { updateRouteColorByProfile } from './routeVisualization.js';
 import { exportRouteToGPX } from './gpxExport.js';
+import {
+  supportsCustomModel,
+  ensureCustomModel,
+  getMapillaryPriority,
+  updateMapillaryPriority
+} from './customModel.js';
 
 export function setupUIHandlers(map) {
   const startBtn = document.getElementById('set-start');
@@ -24,31 +30,29 @@ export function setupUIHandlers(map) {
       routeState.selectedProfile = btn.dataset.profile;
       
       // Set default custom model if car_customizable is selected and no custom model is set
-      if (routeState.selectedProfile === 'car_customizable' && !routeState.customModel) {
-        routeState.customModel = JSON.parse(JSON.stringify(routeState.defaultCustomModel));
+      if (supportsCustomModel(routeState.selectedProfile)) {
+        routeState.customModel = ensureCustomModel(routeState.customModel);
       }
       
       // Show/hide customizable slider
       const sliderContainer = document.getElementById('customizable-slider-container');
       if (sliderContainer) {
-        if (routeState.selectedProfile === 'car_customizable') {
+        if (supportsCustomModel(routeState.selectedProfile)) {
           sliderContainer.style.display = 'block';
           // Initialize slider value from customModel
-          if (routeState.customModel && routeState.customModel.priority) {
-            const mapillaryRule = routeState.customModel.priority.find(r => r.if && r.if.includes('mapillary_coverage==true'));
-            if (mapillaryRule && mapillaryRule.multiply_by !== undefined) {
-              const slider = document.getElementById('mapillary-priority-slider');
-              const sliderValue = document.getElementById('slider-value');
-              if (slider) {
-                // Map the multiply_by value to slider index
-                const sliderValues = [0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.6, 1.0];
-                const index = sliderValues.findIndex(v => Math.abs(v - mapillaryRule.multiply_by) < 0.001);
-                if (index !== -1) {
-                  slider.value = index;
-                  if (sliderValue) {
-                    const inverseValue = (1 / mapillaryRule.multiply_by).toFixed(0);
-                    sliderValue.textContent = `${mapillaryRule.multiply_by.toFixed(2)} (×${inverseValue})`;
-                  }
+          const multiplyBy = getMapillaryPriority(routeState.customModel);
+          if (multiplyBy !== null && multiplyBy !== undefined) {
+            const slider = document.getElementById('mapillary-priority-slider');
+            const sliderValue = document.getElementById('slider-value');
+            if (slider) {
+              // Map the multiply_by value to slider index
+              const sliderValues = [0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.6, 1.0];
+              const index = sliderValues.findIndex(v => Math.abs(v - multiplyBy) < 0.001);
+              if (index !== -1) {
+                slider.value = index;
+                if (sliderValue) {
+                  const inverseValue = (1 / multiplyBy).toFixed(0);
+                  sliderValue.textContent = `${multiplyBy.toFixed(2)} (×${inverseValue})`;
                 }
               }
             }
@@ -199,20 +203,8 @@ export function setupUIHandlers(map) {
       }
       
       // Update customModel if car_customizable is selected
-      if (routeState.selectedProfile === 'car_customizable' && routeState.customModel) {
-        // Ensure customModel exists
-        if (!routeState.customModel.priority) {
-          routeState.customModel.priority = [];
-        }
-        
-        // Find or create mapillary_coverage==true rule
-        let mapillaryRule = routeState.customModel.priority.find(r => r.if && r.if.includes('mapillary_coverage==true'));
-        if (!mapillaryRule) {
-          mapillaryRule = {"if": "mapillary_coverage==true", "multiply_by": value};
-          routeState.customModel.priority.push(mapillaryRule);
-        } else {
-          mapillaryRule.multiply_by = value;
-        }
+      if (supportsCustomModel(routeState.selectedProfile) && routeState.customModel) {
+        updateMapillaryPriority(routeState.customModel, value);
         
         // Recalculate route if both points are set
         if (routeState.startPoint && routeState.endPoint) {

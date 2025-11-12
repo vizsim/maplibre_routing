@@ -10,8 +10,6 @@ export function setupRouteHover(map) {
     closeOnClick: false
   });
   
-  let hoveredSegment = null;
-  
   map.on('mouseenter', 'route-layer', (e) => {
     map.getCanvas().style.cursor = 'pointer';
   });
@@ -19,14 +17,6 @@ export function setupRouteHover(map) {
   map.on('mouseleave', 'route-layer', () => {
     map.getCanvas().style.cursor = '';
     popup.remove();
-    // Clear hover buffer
-    if (map.getSource('route-hover-buffer')) {
-      map.getSource('route-hover-buffer').setData({
-        type: 'FeatureCollection',
-        features: []
-      });
-    }
-    hoveredSegment = null;
   });
   
   map.on('mousemove', 'route-layer', (e) => {
@@ -102,14 +92,6 @@ export function setupRouteHover(map) {
         popup.remove();
       }
       
-      // Clear hover buffer (no longer needed for highlighting)
-      if (hoveredSegment !== null) {
-        hoveredSegment = null;
-        map.getSource('route-hover-buffer').setData({
-          type: 'FeatureCollection',
-          features: []
-        });
-      }
     }
   });
 }

@@ -1,6 +1,8 @@
 // Route State Management
 // Centralized state management for routing functionality
 
+import { defaultCustomModel } from './customModel.js';
+
 export const routeState = {
   // Map instance
   mapInstance: null,
@@ -23,33 +25,9 @@ export const routeState = {
   // Custom model for car_customizable profile
   customModel: null,
   
-  // Default custom model for car_customizable profile
-  defaultCustomModel_tester: {
-    "distance_influence": 90,
-    "priority": [
-      {"if": "road_class==SECONDARY||road_class==PRIMARY||road_class==TRUNK", "multiply_by": 0.1},
-      {"if": "road_class==FOOTWAY||road_class==PATH||road_class==STEPS||road_class==CYCLEWAY", "multiply_by": 0.0},
-      {"if": "mapillary_coverage==false", "multiply_by": 0.1}
-    ],
-    "speed": [
-      {"if": "true", "limit_to": "car_average_speed"},
-      {"if": "car_access==false", "limit_to": 0},
-      {"if": "mapillary_coverage==false", "multiply_by": 1.0}
-    ]
-  },
-
-  defaultCustomModel: {
-    "distance_influence": 90,
-    "priority": [
-      {"if": "road_class==MOTORWAY", "multiply_by": 1.0},
-      {"if": "road_class==FOOTWAY||road_class==PATH||road_class==STEPS||road_class==CYCLEWAY", "multiply_by": 0.0},
-      {"if": "mapillary_coverage==true", "multiply_by": 0.1}
-    ],
-    "speed": [
-      {"if": "true", "limit_to": "car_average_speed"},
-      {"if": "car_access==false", "limit_to": 0},
-      {"if": "mapillary_coverage==false", "multiply_by": 1.0}
-    ]
+  // Default custom model (imported from customModel.js)
+  get defaultCustomModel() {
+    return defaultCustomModel;
   },
   
   // Route data

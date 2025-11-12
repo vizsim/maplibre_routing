@@ -2,6 +2,12 @@
 
 import { routeState } from '../routing/routeState.js';
 import { updateMarkers } from '../routing/routingUI.js';
+import {
+  supportsCustomModel,
+  ensureCustomModel,
+  isDefaultCustomModel,
+  getMapillaryPriority
+} from '../routing/customModel.js';
 
 export class Permalink {
   constructor(map) {
@@ -123,11 +129,8 @@ export class Permalink {
     
     // Custom model (for car_customizable profile)
     // Only include custom_model in URL if it differs from the default
-    if (routeState.selectedProfile === 'car_customizable' && routeState.customModel) {
-      // Check if customModel differs from defaultCustomModel
-      const isDefaultModel = JSON.stringify(routeState.customModel) === JSON.stringify(routeState.defaultCustomModel);
-      
-      if (!isDefaultModel) {
+    if (supportsCustomModel(routeState.selectedProfile) && routeState.customModel) {
+      if (!isDefaultCustomModel(routeState.customModel)) {
         // Only add to URL if it's not the default model
         try {
           const customModelStr = typeof routeState.customModel === 'string' 
@@ -264,6 +267,11 @@ export class Permalink {
       } else {
         routeState.selectedProfile = profileParam;
       }
+      
+      // Ensure custom model is initialized if needed
+      if (supportsCustomModel(routeState.selectedProfile)) {
+        routeState.customModel = ensureCustomModel(routeState.customModel);
+      }
       // Update UI
       document.querySelectorAll('.profile-btn').forEach(btn => {
         btn.classList.remove('active');
@@ -283,12 +291,12 @@ export class Permalink {
     }
     
     // Set default custom model if car_customizable is selected but no custom model is set
-    if (routeState.selectedProfile === 'car_customizable' && !routeState.customModel) {
-      routeState.customModel = JSON.parse(JSON.stringify(routeState.defaultCustomModel));
+    if (supportsCustomModel(routeState.selectedProfile)) {
+      routeState.customModel = ensureCustomModel(routeState.customModel);
     }
     
     // Initialize slider if car_customizable is selected
-    if (routeState.selectedProfile === 'car_customizable') {
+    if (supportsCustomModel(routeState.selectedProfile)) {
       // Wait a bit for UI to be ready
       setTimeout(() => {
         const sliderContainer = document.getElementById('customizable-slider-container');
@@ -296,18 +304,16 @@ export class Permalink {
           sliderContainer.style.display = 'block';
           const slider = document.getElementById('mapillary-priority-slider');
           const sliderValue = document.getElementById('slider-value');
-          if (routeState.customModel && routeState.customModel.priority) {
-            const mapillaryRule = routeState.customModel.priority.find(r => r.if && r.if.includes('mapillary_coverage==true'));
-            if (mapillaryRule && mapillaryRule.multiply_by !== undefined && slider) {
-              // Map the multiply_by value to slider index
-              const sliderValues = [0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.6, 1.0];
-              const index = sliderValues.findIndex(v => Math.abs(v - mapillaryRule.multiply_by) < 0.001);
-              if (index !== -1) {
-                slider.value = index;
-                if (sliderValue) {
-                  const inverseValue = (1 / mapillaryRule.multiply_by).toFixed(0);
-                  sliderValue.textContent = `${mapillaryRule.multiply_by.toFixed(2)} (×${inverseValue})`;
-                }
+          const multiplyBy = getMapillaryPriority(routeState.customModel);
+          if (multiplyBy !== null && multiplyBy !== undefined && slider) {
+            // Map the multiply_by value to slider index
+            const sliderValues = [0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.6, 1.0];
+            const index = sliderValues.findIndex(v => Math.abs(v - multiplyBy) < 0.001);
+            if (index !== -1) {
+              slider.value = index;
+              if (sliderValue) {
+                const inverseValue = (1 / multiplyBy).toFixed(0);
+                sliderValue.textContent = `${multiplyBy.toFixed(2)} (×${inverseValue})`;
               }
             }
           }
