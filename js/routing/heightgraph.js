@@ -162,6 +162,9 @@ function validateHeightgraphData(elevations, coordinates, encodedValues) {
 }
 
 export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, coordinates = [], skipInteractivity = false) {
+  // Clean up existing handlers first to prevent duplicate event listeners
+  cleanupHeightgraphHandlers();
+  
   // Cache DOM elements
   const elements = {
     container: document.getElementById('heightgraph-container'),
@@ -232,8 +235,23 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
   }
   
   // Set canvas size - use more of the available width
-  // Ensure width doesn't exceed container width to prevent overflow
-  const maxWidth = container.clientWidth || HEIGHTGRAPH_CONFIG.canvas.defaultWidth;
+  // CRITICAL: Use getBoundingClientRect() to get the ACTUAL rendered size
+  // container.clientWidth might be 0 or incorrect if layout hasn't been calculated yet
+  // This is especially important on first load (permalink or first route)
+  let containerRect = container.getBoundingClientRect();
+  let containerWidth = containerRect.width;
+  
+  // If container has no width yet, force a reflow and try again
+  if (containerWidth === 0 || containerWidth < 200) {
+    // Force a reflow by accessing offsetWidth
+    void container.offsetWidth;
+    // Wait one frame for layout to settle
+    containerRect = container.getBoundingClientRect();
+    containerWidth = containerRect.width;
+  }
+  
+  // Fallback to default width if still no valid width
+  const maxWidth = containerWidth > 0 ? containerWidth : HEIGHTGRAPH_CONFIG.canvas.defaultWidth;
   const width = Math.max(HEIGHTGRAPH_CONFIG.canvas.minWidth, maxWidth);
   const height = HEIGHTGRAPH_CONFIG.canvas.height;
   
@@ -251,11 +269,43 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
   
   const ctx = canvas.getContext('2d');
   
+  // IMPORTANT: When setting canvas.width/height, the context is reset
+  // So we need to scale again after setting dimensions
   // Scale context to match device pixel ratio
   ctx.scale(dpr, dpr);
   
   // Clear canvas (use logical size for clearRect)
   ctx.clearRect(0, 0, width, height);
+  
+  // Check if we got a valid width - if not, schedule a redraw after layout settles
+  // This handles the case where container width is 0 on first load
+  if (containerWidth === 0 || containerWidth < 200) {
+    // Store a flag to prevent infinite loops
+    if (!canvas._pendingRedraw) {
+      canvas._pendingRedraw = true;
+      // Wait for layout to settle, then redraw
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          // Check if container now has valid width
+          const newRect = container.getBoundingClientRect();
+          const newWidth = newRect.width;
+          if (newWidth > 0 && newWidth >= 200) {
+            // Container now has valid width, redraw
+            canvas._pendingRedraw = false;
+            // Recursively call drawHeightgraph with same parameters
+            drawHeightgraph(elevations, totalDistance, encodedValues, coordinates, skipInteractivity);
+          } else {
+            // Still no valid width, clear flag
+            canvas._pendingRedraw = false;
+          }
+        });
+      });
+      // Don't continue drawing if we're scheduling a redraw - exit early
+      // The redraw will handle everything once the container has valid dimensions
+      return;
+    }
+    // If we're already pending a redraw, continue with default width (fallback)
+  }
   
   if (dataToVisualize.length < 2) return;
   
@@ -391,7 +441,9 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
       const indicatorCtx = indicatorCanvas.getContext('2d');
       indicatorCtx.scale(dpr, dpr);
     }
-    setupHeightgraphInteractivity(canvas, baseData, actualTotalDistance, coordinates, cumulativeDistances);
+    // Pass the actual width and height used for drawing to ensure consistency
+    // This is critical on first load when getBoundingClientRect() might return different values
+    setupHeightgraphInteractivity(canvas, baseData, actualTotalDistance, coordinates, cumulativeDistances, width, height);
   }
   
   // Update stats
@@ -772,7 +824,7 @@ function getBicycleInfraColorForStats(bicycleInfraValue) {
   return getBicycleInfraColorRgba(bicycleInfraValue, 0.15);
 }
 
-function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordinates, cumulativeDistances = null) {
+function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordinates, cumulativeDistances = null, canvasWidth = null, canvasHeight = null) {
   if (!canvas || !routeState.currentRouteData || !routeState.mapInstance || !coordinates || coordinates.length === 0) return;
   
   const { encodedValues } = routeState.currentRouteData;
@@ -781,15 +833,31 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
   // Use same padding values as in drawHeightgraph
   const padding = HEIGHTGRAPH_CONFIG.padding;
   
-  // CRITICAL: Use getBoundingClientRect() to get the ACTUAL rendered size, not canvas.width
-  // canvas.width is the internal resolution, but CSS might scale it down
-  // This was the bug when the chart was made wider!
-  const rect = canvas.getBoundingClientRect();
-  const actualCanvasWidth = rect.width;
-  const actualCanvasHeight = rect.height;
+  // CRITICAL: Use the width/height passed from drawHeightgraph if available
+  // This ensures consistency between drawing and interactivity setup
+  // Fallback to getBoundingClientRect() if not provided (for backwards compatibility)
+  let actualCanvasWidth, actualCanvasHeight;
+  if (canvasWidth !== null && canvasHeight !== null) {
+    // Use the dimensions from drawHeightgraph (logical size, not physical pixels)
+    actualCanvasWidth = canvasWidth;
+    actualCanvasHeight = canvasHeight;
+  } else {
+    // Fallback: Use getBoundingClientRect() to get the ACTUAL rendered size
+    // This is used when called from other places (like dropdown change)
+    const rect = canvas.getBoundingClientRect();
+    actualCanvasWidth = rect.width;
+    actualCanvasHeight = rect.height;
+  }
   
   const graphWidth = actualCanvasWidth - padding.left - padding.right;
   const graphHeight = actualCanvasHeight - padding.top - padding.bottom;
+  
+  // Store canvas dimensions in closure for use in event handlers
+  // These are the logical dimensions (not physical pixels) used for drawing
+  const storedCanvasWidth = actualCanvasWidth;
+  const storedCanvasHeight = actualCanvasHeight;
+  const storedGraphWidth = graphWidth;
+  const storedGraphHeight = graphHeight;
   
   // Calculate cumulative distances if not provided
   let computedCumulativeDistances = cumulativeDistances;
@@ -805,11 +873,14 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
   }
   
   // Remove existing event listeners if they exist
+  // This is critical to prevent duplicate handlers when drawHeightgraph is called multiple times
   if (heightgraphMouseMoveHandler) {
     canvas.removeEventListener('mousemove', heightgraphMouseMoveHandler);
+    heightgraphMouseMoveHandler = null;
   }
   if (heightgraphMouseLeaveHandler) {
     canvas.removeEventListener('mouseleave', heightgraphMouseLeaveHandler);
+    heightgraphMouseLeaveHandler = null;
   }
   
   // Create tooltip element
@@ -841,27 +912,30 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
   }
   
   // Create new event handlers
+  // Use stored dimensions from closure for consistency
   heightgraphMouseMoveHandler = (e) => {
-    // Get fresh bounding rect to handle any resizing or CSS scaling
-    // This is critical: canvas.width might be different from rendered size!
+    // Get mouse position relative to canvas
     const currentRect = canvas.getBoundingClientRect();
     const x = e.clientX - currentRect.left;
     const y = e.clientY - currentRect.top;
     
-    // Recalculate graphWidth from actual rendered size (not canvas.width!)
-    // This fixes the bug when chart width was changed
-    const actualGraphWidth = currentRect.width - padding.left - padding.right;
-    const actualGraphHeight = currentRect.height - padding.top - padding.bottom;
+    // Use stored dimensions for consistency (these match what was used for drawing)
+    // Scale mouse position if canvas is scaled by CSS
+    const scaleX = storedCanvasWidth / currentRect.width;
+    const scaleY = storedCanvasHeight / currentRect.height;
+    const scaledX = x * scaleX;
+    const scaledY = y * scaleY;
     
-    // Calculate graph boundaries - use actual rendered canvas width minus padding
+    // Calculate graph boundaries using stored dimensions
     const leftBoundary = padding.left;
-    const rightBoundary = padding.left + actualGraphWidth;
+    const rightBoundary = padding.left + storedGraphWidth;
     const topBoundary = padding.top;
-    const bottomBoundary = padding.top + actualGraphHeight;
+    const bottomBoundary = padding.top + storedGraphHeight;
     
     // Check if mouse is within graph area (strict boundaries, no tolerance)
-    if (x < leftBoundary || x > rightBoundary || 
-        y < topBoundary || y > bottomBoundary) {
+    // Use scaled coordinates for accurate boundary checking
+    if (scaledX < leftBoundary || scaledX > rightBoundary || 
+        scaledY < topBoundary || scaledY > bottomBoundary) {
       tooltip.style.display = 'none';
       if (routeHighlightMarker) {
         routeHighlightMarker.remove();
@@ -890,8 +964,8 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
     // Calculate which segment the mouse is over (not just a point)
     // Use distance-based calculation to match the X-axis labels
     // Calculate relative position within the graph area (0 to 1)
-    // Use actualGraphWidth (from rendered size), not graphWidth (from canvas.width)!
-    const relativeX = (x - padding.left) / actualGraphWidth;
+    // Use storedGraphWidth for consistency with drawing
+    const relativeX = (scaledX - padding.left) / storedGraphWidth;
     // Clamp to valid range [0, 1]
     const clampedRelativeX = Math.max(0, Math.min(1, relativeX));
     
@@ -942,9 +1016,10 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
     const dataIndex = segmentStartIndex;
     
     // Calculate segment midpoint for positioning
+    // Use storedGraphWidth for consistency with drawing
     const segmentMidDistance = (segmentStartDistance + segmentEndDistance) / 2;
     const segmentMidRelativeX = segmentMidDistance / actualTotalDistance;
-    const segmentMidX = padding.left + (segmentMidRelativeX * actualGraphWidth);
+    const segmentMidX = padding.left + (segmentMidRelativeX * storedGraphWidth);
     
     if (dataIndex >= 0 && dataIndex < elevations.length && dataIndex < coordinates.length) {
       const elevation = elevations[dataIndex];
@@ -1005,14 +1080,15 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
       const offsetY = -30; // Vertical offset from cursor
       
       // Use segment midpoint X position for tooltip positioning
-      const tooltipX = segmentMidX;
-      let tooltipLeft = rect.left + tooltipX + offsetX;
-      let tooltipTop = rect.top + y + offsetY;
+      // Convert segmentMidX back to screen coordinates
+      const tooltipX = segmentMidX / scaleX;
+      let tooltipLeft = currentRect.left + tooltipX + offsetX;
+      let tooltipTop = currentRect.top + y + offsetY;
       
       // Check if tooltip goes over right edge of viewport
       if (tooltipLeft + tooltipWidth > window.innerWidth) {
         // Position tooltip to the left of segment midpoint
-        tooltipLeft = rect.left + tooltipX - tooltipWidth - offsetX;
+        tooltipLeft = currentRect.left + tooltipX - tooltipWidth - offsetX;
       }
       
       // Check if tooltip goes over left edge of viewport
@@ -1069,8 +1145,9 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
           }
           
           // Get logical size (CSS size) for clearRect
-          const logicalWidth = actualCanvasWidth;
-          const logicalHeight = actualCanvasHeight;
+          // Use stored dimensions from closure, not getBoundingClientRect()
+          const logicalWidth = storedCanvasWidth;
+          const logicalHeight = storedCanvasHeight;
           
           // Clear previous indicator line (use logical size)
           indicatorCtx.clearRect(0, 0, logicalWidth, logicalHeight);
@@ -1085,17 +1162,17 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
           indicatorCtx.lineWidth = 2;
           indicatorCtx.beginPath();
           indicatorCtx.moveTo(indicatorX, padding.top);
-          indicatorCtx.lineTo(indicatorX, padding.top + actualGraphHeight);
+          indicatorCtx.lineTo(indicatorX, padding.top + storedGraphHeight);
           indicatorCtx.stroke();
         } else {
           // Fallback: draw on main canvas if indicator canvas not available
           const ctx = canvas.getContext('2d');
-          const indicatorX = padding.left + (clampedRelativeX * actualGraphWidth);
+          const indicatorX = padding.left + (segmentMidRelativeX * storedGraphWidth);
           ctx.strokeStyle = HEIGHTGRAPH_CONFIG.colors.indicatorLine;
           ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.moveTo(indicatorX, padding.top);
-          ctx.lineTo(indicatorX, padding.top + actualGraphHeight);
+          ctx.lineTo(indicatorX, padding.top + storedGraphHeight);
           ctx.stroke();
         }
       }

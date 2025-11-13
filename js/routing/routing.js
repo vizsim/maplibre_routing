@@ -708,17 +708,52 @@ export async function calculateRoute(map, start, end, waypoints = []) {
         }
         
         // Always show heightgraph if we have elevation or encoded values
-        if (hasElevation && elevations.length > 0) {
-          drawHeightgraph(elevations, path.distance, encodedValues, coordinates);
-        } else if (Object.keys(encodedValues).length > 0) {
-          // Show heightgraph even without elevation if we have encoded values
-          drawHeightgraph([], path.distance, encodedValues, coordinates);
-        } else {
-          // Hide heightgraph if no data
-          const heightgraphContainer = document.getElementById('heightgraph-container');
-          if (heightgraphContainer) {
-            heightgraphContainer.style.display = 'none';
+        // Wait for panel positioning to complete before drawing heightgraph
+        // This ensures canvas size is calculated correctly, especially when loading from permalink
+        const drawHeightgraphDelayed = () => {
+          if (hasElevation && elevations.length > 0) {
+            drawHeightgraph(elevations, path.distance, encodedValues, coordinates);
+          } else if (Object.keys(encodedValues).length > 0) {
+            // Show heightgraph even without elevation if we have encoded values
+            drawHeightgraph([], path.distance, encodedValues, coordinates);
+          } else {
+            // Hide heightgraph if no data
+            const heightgraphContainer = document.getElementById('heightgraph-container');
+            if (heightgraphContainer) {
+              heightgraphContainer.style.display = 'none';
+            }
           }
+        };
+        
+        // Show container and ensure it's visible before drawing
+        // The drawHeightgraph function will handle checking for valid width
+        const heightgraphContainer = document.getElementById('heightgraph-container');
+        if (heightgraphContainer) {
+          // Show container first so it can be measured
+          heightgraphContainer.style.display = 'block';
+          
+          // Trigger panel positioning to ensure layout is calculated
+          const routingPanel = document.querySelector('.routing-panel');
+          if (routingPanel) {
+            window.dispatchEvent(new Event('resize'));
+          }
+          
+          // Wait for layout to settle before drawing
+          // Use multiple requestAnimationFrame calls to ensure layout is fully calculated
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              // Force a reflow to ensure container has valid dimensions
+              void heightgraphContainer.offsetWidth;
+              requestAnimationFrame(() => {
+                drawHeightgraphDelayed();
+              });
+            });
+          });
+        } else {
+          // No container, draw immediately (shouldn't happen)
+          requestAnimationFrame(() => {
+            drawHeightgraphDelayed();
+          });
         }
         
         // Update route color based on current selection

@@ -696,6 +696,28 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Collapse/expand context panel handler
+  const collapseContextBtn = document.getElementById('collapse-context-panel');
+  if (collapseContextBtn) {
+    collapseContextBtn.addEventListener('click', () => {
+      const panel = document.querySelector('.context-panel');
+      if (panel) {
+        const isCollapsed = panel.classList.contains('collapsed');
+        if (isCollapsed) {
+          // Expand panel
+          panel.classList.remove('collapsed');
+          collapseContextBtn.textContent = '▼';
+          collapseContextBtn.title = 'Einklappen';
+        } else {
+          // Collapse panel
+          panel.classList.add('collapsed');
+          collapseContextBtn.textContent = '▶';
+          collapseContextBtn.title = 'Ausklappen';
+        }
+      }
+    });
+  }
+
   // Position context panel below routing panel
   const routingPanel = document.querySelector('.routing-panel');
   const contextPanel = document.querySelector('.context-panel');
@@ -794,6 +816,16 @@ document.addEventListener('DOMContentLoaded', () => {
         contextPanel.style.bottom = 'auto';
         contextPanel.style.display = 'block'; // Ensure it's visible
         
+        // Dispatch event to signal that panel positioning is complete
+        // This allows other code (like heightgraph drawing) to wait for positioning
+        window.dispatchEvent(new CustomEvent('panelPositioningComplete', {
+          detail: {
+            routingPanelHeight: updatedRoutingRect.height,
+            contextPanelTop: contextTop,
+            contextPanelMaxHeight: finalMaxHeight
+          }
+        }));
+        
         // Reset flag after a short delay to allow for any pending updates
         updateTimeout = setTimeout(() => {
           isUpdating = false;
@@ -849,6 +881,61 @@ document.addEventListener('DOMContentLoaded', () => {
         subtree: true, 
         attributes: true, 
         attributeFilter: ['style'] 
+      });
+      
+      // When heightgraph container becomes visible, redraw heightgraph after panel positioning
+      // But only if it wasn't just drawn (to avoid duplicate drawings)
+      let isDrawingHeightgraph = false;
+      let lastDrawTime = 0;
+      const heightgraphObserver = new MutationObserver((mutations) => {
+        // Skip if we're already drawing to prevent duplicate calls
+        if (isDrawingHeightgraph) return;
+        
+        // Skip if we just drew recently (within 1 second) to prevent duplicate drawings
+        const now = Date.now();
+        if (now - lastDrawTime < 1000) return;
+        
+        mutations.forEach((mutation) => {
+          if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+            const display = window.getComputedStyle(heightgraphContainer).display;
+            if (display !== 'none' && routeState.currentRouteData) {
+              // Check if heightgraph was just drawn (has content)
+              const canvas = document.getElementById('heightgraph-canvas');
+              if (canvas && canvas.width > 0) {
+                // Heightgraph already has content, just redraw after panel positioning
+                // This happens when panel positioning changes the container size
+                isDrawingHeightgraph = true;
+                lastDrawTime = now;
+                requestAnimationFrame(() => {
+                  requestAnimationFrame(() => {
+                    const { elevations, distance, encodedValues, coordinates } = routeState.currentRouteData;
+                    if (elevations || Object.keys(encodedValues || {}).length > 0) {
+                      import('./js/routing/heightgraph.js').then(({ drawHeightgraph }) => {
+                        drawHeightgraph(
+                          elevations || [], 
+                          distance, 
+                          encodedValues || {}, 
+                          coordinates || []
+                        );
+                        // Reset flag after a delay
+                        setTimeout(() => {
+                          isDrawingHeightgraph = false;
+                        }, 500);
+                      });
+                    } else {
+                      isDrawingHeightgraph = false;
+                    }
+                  });
+                });
+              }
+            }
+          }
+        });
+      });
+      
+      heightgraphObserver.observe(heightgraphContainer, {
+        attributes: true,
+        attributeFilter: ['style']
       });
     }
   }

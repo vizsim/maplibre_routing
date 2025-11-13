@@ -1227,6 +1227,22 @@ code {
   z-index: 1;
   font-family: sans-serif;
   overflow: hidden; /* Let content handle scrolling */
+  transition: width 0.3s ease, max-height 0.3s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.context-panel.collapsed {
+  width: 320px;
+}
+
+.context-panel.collapsed .context-content {
+  display: none !important;
+}
+
+.context-panel.collapsed .context-header {
+  border-bottom: none;
+  padding: 12px 16px;
 }
 
 /* Ensure attribution control doesn't overlap with context panel */
@@ -1385,6 +1401,179 @@ code {
 
 .switch-toggle input:checked:hover + .switch-slider {
   background-color: #2563eb;
+}
+
+/* ───── Mobile Optimizations ───── */
+@media (max-width: 768px) {
+  /* Panels: Full width on mobile, less padding */
+  .routing-panel,
+  .context-panel {
+    width: calc(100% - 10px);
+    max-width: calc(100% - 10px);
+    top: 5px;
+    right: 5px;
+    left: 5px;
+  }
+
+  /* Larger touch targets for buttons */
+  .profile-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 10px;
+  }
+
+  .btn-set-point,
+  .btn-add-waypoint {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .btn-close {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+  }
+
+  /* Larger input fields for easier typing */
+  .input-with-button input {
+    font-size: 16px; /* Prevents zoom on iOS */
+    padding: 10px 8px;
+    min-height: 44px;
+  }
+
+  .waypoints-header-field {
+    font-size: 16px;
+    padding: 10px 8px;
+    min-height: 44px;
+  }
+
+  /* Larger text in panels */
+  .routing-header {
+    padding: 14px 12px;
+  }
+
+  .routing-content {
+    padding: 12px;
+  }
+
+  .context-segment-header {
+    padding: 14px 12px;
+  }
+
+  .context-segment-content {
+    padding: 12px;
+  }
+
+  /* Larger switches */
+  .switch-toggle {
+    width: 52px;
+    height: 28px;
+  }
+
+  .switch-slider:before {
+    height: 22px;
+    width: 22px;
+  }
+
+  .switch-toggle input:checked + .switch-slider:before {
+    transform: translateX(24px);
+  }
+
+  /* Bottom-left UI: Stack vertically on mobile */
+  #bottom-left-ui-container {
+    flex-direction: column;
+    gap: 8px;
+    bottom: 5px;
+    left: 5px;
+  }
+
+  /* Smaller basemap thumbs on mobile */
+  .basemap-thumb {
+    width: 50px;
+    height: 50px;
+  }
+
+  #terrain-controls {
+    height: 55px;
+    font-size: 11px;
+    padding: 3px 5px;
+  }
+
+  /* Larger select dropdowns */
+  .heightgraph-select {
+    font-size: 16px;
+    padding: 10px 8px;
+    min-height: 44px;
+  }
+
+  /* Adjust route info spacing */
+  .route-info-compact {
+    padding: 12px;
+    gap: 10px 16px;
+  }
+
+  /* Larger waypoint items */
+  .waypoint-item {
+    padding: 8px 10px;
+    min-height: 44px;
+  }
+
+  .waypoint-number {
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+  }
+
+  /* Context panel segments - larger touch areas */
+  .context-segment-title {
+    font-size: 15px;
+  }
+
+  /* GitHub links - stack on mobile */
+  .github-links {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 0 12px;
+  }
+}
+
+/* Very small screens (phones in portrait) */
+@media (max-width: 480px) {
+  .routing-panel,
+  .context-panel {
+    width: calc(100% - 8px);
+    max-width: calc(100% - 8px);
+    top: 4px;
+    right: 4px;
+    left: 4px;
+  }
+
+  .routing-header {
+    padding: 12px 10px;
+  }
+
+  .routing-content {
+    padding: 10px;
+  }
+
+  .profile-selector {
+    gap: 3px;
+  }
+
+  .profile-btn {
+    min-width: 40px;
+    min-height: 40px;
+    padding: 8px;
+  }
+
+  .profile-btn svg {
+    width: 18px;
+    height: 18px;
+  }
 }
 
 .context-segment-content {
