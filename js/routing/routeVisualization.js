@@ -1,45 +1,7 @@
 // Route visualization: colors, hover effects, mapillary_coverage highlighting
 
 import { routeState } from './routeState.js';
-import { getColorForEncodedValue } from './colorSchemes.js';
-
-// Bicycle infrastructure descriptions mapping (same as in heightgraph.js)
-const BICYCLE_INFRA_DESCRIPTIONS = {
-  'none': 'Keine spezielle Fahrradinfrastruktur',
-  'bicycleroad': 'Fahrradstraße',
-  'bicycleroad_vehicledestination': 'Fahrradstraße mit Anlieger/Kfz frei',
-  'pedestrianareabicycleyes': 'Fußgängerzone, Fahrrad frei',
-  'cycleway_adjoining': 'Radweg, straßenbegleitend',
-  'cycleway_isolated': 'Radweg, selbstständig geführt',
-  'cycleway_adjoiningorisolated': 'Radweg (Fallback)',
-  'cyclewaylink': 'Radweg-Routing-Verbindungsstück',
-  'crossing': 'Straßenquerung',
-  'cyclewayonhighway_advisory': 'Schutzstreifen',
-  'cyclewayonhighway_exclusive': 'Radfahrstreifen',
-  'cyclewayonhighway_advisoryorexclusive': 'Radfahrstreifen/Schutzstreifen (Fallback)',
-  'cyclewayonhighwaybetweenlanes': 'Radfahrstreifen in Mittellage ("Angstweiche")',
-  'cyclewayonhighwayprotected': 'Protected Bike Lane (PBL)',
-  'sharedbuslanebikewithbus': 'Radfahrstreifen mit Freigabe Busverkehr',
-  'sharedbuslanebuswithbike': 'Bussonderfahrstreifen mit Fahrrad frei',
-  'sharedmotorvehiclelane': 'Gemeinsamer Fahrstreifen',
-  'footandcyclewaysegregated_adjoining': 'Getrennter Geh- und Radweg, straßenbegleitend',
-  'footandcyclewaysegregated_isolated': 'Getrennter Geh- und Radweg, selbstständig',
-  'footandcyclewaysegregated_adjoiningorisolated': 'Getrennter Geh- und Radweg (Fallback)',
-  'footandcyclewayshared_adjoining': 'Gemeinsamer Geh- und Radweg, straßenbegleitend',
-  'footandcyclewayshared_isolated': 'Gemeinsamer Geh- und Radweg, selbstständig',
-  'footandcyclewayshared_adjoiningorisolated': 'Gemeinsamer Geh- und Radweg (Fallback)',
-  'footwaybicycleyes_adjoining': 'Gehweg, Fahrrad frei, straßenbegleitend',
-  'footwaybicycleyes_isolated': 'Gehweg, Fahrrad frei, selbstständig',
-  'footwaybicycleyes_adjoiningorisolated': 'Gehweg, Fahrrad frei (Fallback)',
-  'needsclarification': 'Führungsform unklar - Tags nicht ausreichend'
-};
-
-// Helper function to get bicycle infrastructure description
-function getBicycleInfraDescription(value) {
-  if (!value) return null;
-  const normalizedValue = String(value).toLowerCase();
-  return BICYCLE_INFRA_DESCRIPTIONS[normalizedValue] || null;
-}
+import { getColorForEncodedValue, getBicycleInfraDescription } from './colorSchemes.js';
 
 export function setupRouteHover(map) {
   // Create a popup for showing encoded values on hover

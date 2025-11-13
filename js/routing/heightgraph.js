@@ -2,45 +2,8 @@
 
 import { routeState } from './routeState.js';
 import { updateRouteColor } from './routeVisualization.js';
-import { getSurfaceColorRgba, getRoadClassColorRgba, getBicycleInfraColorRgba } from './colorSchemes.js';
+import { getSurfaceColorRgba, getRoadClassColorRgba, getBicycleInfraColorRgba, getBicycleInfraDescription } from './colorSchemes.js';
 
-// Bicycle infrastructure descriptions mapping
-const BICYCLE_INFRA_DESCRIPTIONS = {
-  'none': 'Keine spezielle Fahrradinfrastruktur',
-  'bicycleroad': 'Fahrradstraße',
-  'bicycleroad_vehicledestination': 'Fahrradstraße mit<br>Anlieger/Kfz frei',
-  'pedestrianareabicycleyes': 'Fußgängerzone,<br>Fahrrad frei',
-  'cycleway_adjoining': 'Radweg,<br>straßenbegleitend',
-  'cycleway_isolated': 'Radweg,<br>selbstständig geführt',
-  'cycleway_adjoiningorisolated': 'Radweg (Fallback)',
-  'cyclewaylink': 'Radweg-Routing-<br>Verbindungsstück',
-  'crossing': 'Straßenquerung',
-  'cyclewayonhighway_advisory': 'Schutzstreifen',
-  'cyclewayonhighway_exclusive': 'Radfahrstreifen',
-  'cyclewayonhighway_advisoryorexclusive': 'Radfahrstreifen/<br>Schutzstreifen (Fallback)',
-  'cyclewayonhighwaybetweenlanes': 'Radfahrstreifen in<br>Mittellage ("Angstweiche")',
-  'cyclewayonhighwayprotected': 'Protected Bike Lane (PBL)',
-  'sharedbuslanebikewithbus': 'Radfahrstreifen mit<br>Freigabe Busverkehr',
-  'sharedbuslanebuswithbike': 'Bussonderfahrstreifen<br>mit Fahrrad frei',
-  'sharedmotorvehiclelane': 'Gemeinsamer Fahrstreifen',
-  'footandcyclewaysegregated_adjoining': 'Getrennter Geh- und<br>Radweg, straßenbegleitend',
-  'footandcyclewaysegregated_isolated': 'Getrennter Geh- und<br>Radweg, selbstständig',
-  'footandcyclewaysegregated_adjoiningorisolated': 'Getrennter Geh- und<br>Radweg (Fallback)',
-  'footandcyclewayshared_adjoining': 'Gemeinsamer Geh- und<br>Radweg, straßenbegleitend',
-  'footandcyclewayshared_isolated': 'Gemeinsamer Geh- und<br>Radweg, selbstständig',
-  'footandcyclewayshared_adjoiningorisolated': 'Gemeinsamer Geh- und<br>Radweg (Fallback)',
-  'footwaybicycleyes_adjoining': 'Gehweg, Fahrrad frei,<br>straßenbegleitend',
-  'footwaybicycleyes_isolated': 'Gehweg, Fahrrad frei,<br>selbstständig',
-  'footwaybicycleyes_adjoiningorisolated': 'Gehweg, Fahrrad frei<br>(Fallback)',
-  'needsclarification': 'Führungsform unklar -<br>Tags nicht ausreichend'
-};
-
-// Helper function to get bicycle infrastructure description
-function getBicycleInfraDescription(value) {
-  if (!value) return null;
-  const normalizedValue = String(value).toLowerCase();
-  return BICYCLE_INFRA_DESCRIPTIONS[normalizedValue] || null;
-}
 
 // Centralized configuration
 const HEIGHTGRAPH_CONFIG = {
