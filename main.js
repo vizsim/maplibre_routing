@@ -591,6 +591,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Map Settings Menu Toggle
+  const mapSettingsToggle = document.getElementById('map-settings-toggle');
+  const mapSettingsPanel = document.getElementById('map-settings-panel');
+  const mapSettingsMenu = document.getElementById('map-settings-menu');
+  
+  if (mapSettingsToggle && mapSettingsPanel && mapSettingsMenu) {
+    mapSettingsToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      mapSettingsPanel.classList.toggle('hidden');
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!mapSettingsMenu.contains(e.target)) {
+        mapSettingsPanel.classList.add('hidden');
+      }
+    });
+  }
+
   // Bike lanes toggle
   const toggleBikelanes = document.getElementById('toggle-bikelanes');
   const bikelanesLegend = document.getElementById('bikelanes-legend');
