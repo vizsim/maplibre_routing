@@ -185,6 +185,11 @@ function extractEncodedValues(path, coordinates) {
 }
 
 // Format time display
+function formatNumberWithThousandSeparator(num) {
+  // Use thin space (U+2009) as thousand separator
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u2009');
+}
+
 function formatTime(timeSeconds) {
   const timeMinutes = Math.round(timeSeconds / 60);
   const timeHours = Math.floor(timeMinutes / 60);
@@ -209,7 +214,7 @@ function generateRouteInfoHTML(path) {
   const ascend = path.ascend ? Math.round(path.ascend) : null;
   const descend = path.descend ? Math.round(path.descend) : null;
   const instructionCount = path.instructions ? path.instructions.length : null;
-  const weight = path.weight ? path.weight.toFixed(2) : null;
+  const weight = path.weight ? formatNumberWithThousandSeparator(Math.round(path.weight)) : null;
   
   return `
     <div class="route-info-compact">
@@ -256,6 +261,14 @@ function generateRouteInfoHTML(path) {
       ` : ''}
       ${weight !== null ? `
       <div class="route-info-row">
+        <svg width="16" height="16" viewBox="0 0 512.001 512.001" fill="currentColor">
+          <path d="M345.589,236.508h-89.589h-89.59c-10.763,0-19.488,8.726-19.488,19.488s8.726,19.488,19.488,19.488h89.59h89.589c10.763,0,19.488-8.726,19.488-19.488S356.352,236.508,345.589,236.508z"/>
+          <path d="M345.589,236.508h-89.589v38.977h89.589c10.763,0,19.488-8.726,19.488-19.488S356.352,236.508,345.589,236.508z"/>
+          <path d="M82.567,348.538H12.992C5.817,348.538,0,342.721,0,335.545v-159.09c0-7.176,5.817-12.992,12.992-12.992h69.575V348.538z"/>
+          <path d="M429.434,163.464h69.575c7.176,0,12.992,5.817,12.992,12.992v159.09c0,7.176-5.817,12.992-12.992,12.992h-69.575V163.464z"/>
+          <path d="M153.419,382.424H82.567c-7.176,0-12.992-5.817-12.992-12.992V142.569c0-7.176,5.817-12.992,12.992-12.992h70.852c7.176,0,12.992,5.817,12.992,12.992v226.863C166.411,376.608,160.594,382.424,153.419,382.424z"/>
+          <path d="M358.582,129.577h70.852c7.176,0,12.992,5.817,12.992,12.992v226.863c0,7.176-5.817,12.992-12.992,12.992h-70.852c-7.176,0-12.992-5.817-12.992-12.992V142.569C345.589,135.394,351.406,129.577,358.582,129.577z"/>
+        </svg>
         <span class="route-info-compact-label">Weight:</span>
         <span class="route-info-compact-value">${weight}</span>
       </div>
@@ -619,7 +632,7 @@ export async function calculateRoute(map, start, end, waypoints = []) {
         const instructionCount = path.instructions ? path.instructions.length : null;
         
         // Additional GraphHopper data
-        const weight = path.weight ? path.weight.toFixed(2) : null;
+        const weight = path.weight ? formatNumberWithThousandSeparator(Math.round(path.weight)) : null;
         
         routeInfo.innerHTML = `
           <div class="route-info-compact">
@@ -640,7 +653,6 @@ export async function calculateRoute(map, start, end, waypoints = []) {
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12,2A10,10,0,1,0,22,12,10.011,10.011,0,0,0,12,2Zm7.411,13H12.659L9.919,8.606a1,1,0,1,0-1.838.788L10.484,15H4.589a8,8,0,1,1,14.822,0Z"/>
               </svg>
-              <span class="route-info-compact-label">Ø:</span>
               <span class="route-info-compact-value">${avgSpeed} km/h</span>
             </div>
             ${(ascend !== null || descend !== null) ? `
@@ -666,7 +678,15 @@ export async function calculateRoute(map, start, end, waypoints = []) {
             ` : ''}
             ${weight !== null ? `
             <div class="route-info-row">
-              <span class="route-info-compact-label">Weight:</span>
+              <svg width="16" height="16" viewBox="0 0 512.001 512.001" fill="currentColor">
+                <path d="M345.589,236.508h-89.589h-89.59c-10.763,0-19.488,8.726-19.488,19.488s8.726,19.488,19.488,19.488h89.59h89.589c10.763,0,19.488-8.726,19.488-19.488S356.352,236.508,345.589,236.508z"/>
+                <path d="M345.589,236.508h-89.589v38.977h89.589c10.763,0,19.488-8.726,19.488-19.488S356.352,236.508,345.589,236.508z"/>
+                <path d="M82.567,348.538H12.992C5.817,348.538,0,342.721,0,335.545v-159.09c0-7.176,5.817-12.992,12.992-12.992h69.575V348.538z"/>
+                <path d="M429.434,163.464h69.575c7.176,0,12.992,5.817,12.992,12.992v159.09c0,7.176-5.817,12.992-12.992,12.992h-69.575V163.464z"/>
+                <path d="M153.419,382.424H82.567c-7.176,0-12.992-5.817-12.992-12.992V142.569c0-7.176,5.817-12.992,12.992-12.992h70.852c7.176,0,12.992,5.817,12.992,12.992v226.863C166.411,376.608,160.594,382.424,153.419,382.424z"/>
+                <path d="M358.582,129.577h70.852c7.176,0,12.992,5.817,12.992,12.992v226.863c0,7.176-5.817,12.992-12.992,12.992h-70.852c-7.176,0-12.992-5.817-12.992-12.992V142.569C345.589,135.394,351.406,129.577,358.582,129.577z"/>
+              </svg>
+              <span class="route-info-compact-label">weight:</span>
               <span class="route-info-compact-value">${weight}</span>
             </div>
             ` : ''}
