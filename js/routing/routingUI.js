@@ -205,60 +205,42 @@ export function setupUIHandlers(map) {
         return;
       }
       
+      // Prevent multiple simultaneous calls
+      if (retryInterval) {
+        return; // Already trying to calculate
+      }
+      
       const { calculateRoute, isRouteCalculationInProgress } = await import('./routing.js');
       
-      // Try to calculate route
-      calculateRoute(map, routeState.startPoint, routeState.endPoint);
+      // Check if a calculation is already in progress
+      if (isRouteCalculationInProgress()) {
+        // Wait a bit and try again
+        setTimeout(() => {
+          if (pendingRecalculation && !isRouteCalculationInProgress()) {
+            triggerRouteRecalculation();
+          }
+        }, 100);
+        return;
+      }
       
-      // Check if calculation was accepted (started) or ignored
-      setTimeout(() => {
-        if (isRouteCalculationInProgress()) {
-          // Calculation was accepted and is in progress
-          if (retryInterval) {
-            clearInterval(retryInterval);
-            retryInterval = null;
-          }
-          pendingRecalculation = false;
-          sliderStartTime = null;
-        } else if (pendingRecalculation) {
-          // Calculation was ignored, check if we need to start retry mechanism
-          const elapsed = sliderStartTime ? Date.now() - sliderStartTime : 0;
-          if (elapsed >= 1000 && !retryInterval) {
-            // After 1 second, start retry mechanism
-            retryInterval = setInterval(() => {
-              if (!pendingRecalculation) {
-                clearInterval(retryInterval);
-                retryInterval = null;
-                return;
-              }
-              
-              // Try to calculate route
-              calculateRoute(map, routeState.startPoint, routeState.endPoint, routeState.waypoints);
-              
-              // Check if calculation started
-              setTimeout(() => {
-                if (isRouteCalculationInProgress()) {
-                  // Calculation started successfully
-                  clearInterval(retryInterval);
-                  retryInterval = null;
-                  pendingRecalculation = false;
-                  sliderStartTime = null;
-                } else {
-                  // Still not started, check if we should stop retrying
-                  const totalElapsed = sliderStartTime ? Date.now() - sliderStartTime : 0;
-                  if (totalElapsed > 2000) {
-                    // Stop retrying after 2 seconds total
-                    clearInterval(retryInterval);
-                    retryInterval = null;
-                    pendingRecalculation = false;
-                    sliderStartTime = null;
-                  }
-                }
-              }, 50);
-            }, 100);
-          }
-        }
-      }, 100);
+      // Clear all timeouts since we're about to calculate
+      if (sliderTimeout) {
+        clearTimeout(sliderTimeout);
+        sliderTimeout = null;
+      }
+      if (sliderMaxTimeout) {
+        clearTimeout(sliderMaxTimeout);
+        sliderMaxTimeout = null;
+      }
+      
+      // Reset pending flag immediately to prevent duplicate calls
+      pendingRecalculation = false;
+      
+      // Try to calculate route (include waypoints)
+      calculateRoute(map, routeState.startPoint, routeState.endPoint, routeState.waypoints);
+      
+      // Reset slider start time
+      sliderStartTime = null;
     };
     
     mapillarySlider.addEventListener('input', (e) => {
@@ -293,9 +275,13 @@ export function setupUIHandlers(map) {
         }, 300);
         
         // Maximum timeout: ensure recalculation happens after 1 second from first change
+        // Only set if not already set (to prevent multiple timeouts)
         if (!sliderMaxTimeout) {
           sliderMaxTimeout = setTimeout(() => {
-            triggerRouteRecalculation();
+            // Only trigger if pendingRecalculation is still true (sliderTimeout hasn't fired yet)
+            if (pendingRecalculation) {
+              triggerRouteRecalculation();
+            }
             sliderMaxTimeout = null;
           }, 1000);
         }
