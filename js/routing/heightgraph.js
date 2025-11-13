@@ -446,7 +446,6 @@ function drawGrid(ctx, padding, graphWidth, graphHeight, baseData) {
   ctx.lineWidth = 1;
   
   // Y-axis always shows elevation data (baseData), regardless of selectedType
-  const gridSteps = HEIGHTGRAPH_CONFIG.grid.steps;
   const yLabels = new Set(); // Track Y-axis labels to avoid duplicates
   
   // Calculate elevation range for Y-axis labels
@@ -463,26 +462,58 @@ function drawGrid(ctx, padding, graphWidth, graphHeight, baseData) {
     }
   }
   
-  for (let i = 0; i <= gridSteps; i++) {
-    const y = padding.top + (graphHeight / gridSteps) * i;
-    ctx.beginPath();
-    ctx.moveTo(padding.left, y);
-    ctx.lineTo(padding.left + graphWidth, y);
-    ctx.stroke();
+  // Calculate ticks in 5 or 10 meter steps, minimal but nice
+  const calculateNiceTicks = (min, max) => {
+    const range = max - min;
     
-    // Label - always use elevation data for Y-axis, always natural numbers
-    const elevationValue = elevationMax - (elevationRange / gridSteps) * i;
-    const labelText = Math.round(elevationValue) + ' m';
-    
-    // Only draw label if it's not a duplicate
-    if (!yLabels.has(labelText)) {
-      yLabels.add(labelText);
-      ctx.fillStyle = HEIGHTGRAPH_CONFIG.colors.text;
-      ctx.font = `${HEIGHTGRAPH_CONFIG.font.size} ${HEIGHTGRAPH_CONFIG.font.family}`;
-      ctx.textAlign = 'right';
-      ctx.fillText(labelText, padding.left - 3, y + 3);
+    // Determine step size: prefer 10, fall back to 5 for smaller ranges
+    // Use 10m steps if range >= 35m to avoid too many ticks
+    let step = 10;
+    if (range < 35) {
+      step = 5;
     }
-  }
+    
+    // Round min down to nearest step
+    const tickMin = Math.floor(min / step) * step;
+    // Round max up to nearest step
+    const tickMax = Math.ceil(max / step) * step;
+    
+    // Generate ticks
+    const ticks = [];
+    for (let value = tickMin; value <= tickMax; value += step) {
+      ticks.push(value);
+    }
+    
+    return { ticks, step };
+  };
+  
+  const { ticks } = calculateNiceTicks(elevationMin, elevationMax);
+  
+  // Draw grid lines and labels for each tick
+  ticks.forEach((elevationValue) => {
+    // Calculate Y position based on elevation value
+    const y = padding.top + graphHeight - ((elevationValue - elevationMin) / elevationRange) * graphHeight;
+    
+    // Only draw if within graph bounds
+    if (y >= padding.top && y <= padding.top + graphHeight) {
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(padding.left + graphWidth, y);
+      ctx.stroke();
+      
+      // Label - always use elevation data for Y-axis, always natural numbers
+      const labelText = Math.round(elevationValue) + ' m';
+      
+      // Only draw label if it's not a duplicate
+      if (!yLabels.has(labelText)) {
+        yLabels.add(labelText);
+        ctx.fillStyle = HEIGHTGRAPH_CONFIG.colors.text;
+        ctx.font = `${HEIGHTGRAPH_CONFIG.font.size} ${HEIGHTGRAPH_CONFIG.font.family}`;
+        ctx.textAlign = 'right';
+        ctx.fillText(labelText, padding.left - 3, y + 3);
+      }
+    }
+  });
 }
 
 // Draw elevation line
