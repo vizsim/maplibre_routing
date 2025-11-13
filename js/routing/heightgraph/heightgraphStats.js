@@ -3,7 +3,7 @@
 import { routeState } from '../routeState.js';
 import { calculateDistance } from './heightgraphUtils.js';
 import { getSurfaceColorForStats, getRoadClassColorForStats, getBicycleInfraColorForStats } from './heightgraphDrawing.js';
-import { getBicycleInfraDescription } from '../colorSchemes.js';
+import { getBicycleInfraDescription, getColorForEncodedValue } from '../colorSchemes.js';
 
 /**
  * Calculate and display statistics for the selected encoded value
@@ -81,7 +81,12 @@ export function updateHeightgraphStats(encodedType, encodedValues) {
       }
     }
     
-    statsHTML += `<div class="heightgraph-stat-item" style="background-color: ${backgroundColor};">
+    // Add data attributes for hover functionality
+    const encodedKey = encodeURIComponent(key);
+    statsHTML += `<div class="heightgraph-stat-item" 
+      data-encoded-type="${encodedType}" 
+      data-value="${encodedKey}" 
+      style="background-color: ${backgroundColor}; cursor: pointer;">
       <span class="heightgraph-stat-label">${displayKey}</span>
       <span class="heightgraph-stat-value">${distanceKm} km</span>
     </div>`;
@@ -89,5 +94,108 @@ export function updateHeightgraphStats(encodedType, encodedValues) {
   
   statsContainer.innerHTML = statsHTML;
   statsContainer.style.display = 'flex';
+  
+  // Setup hover handlers for stats items
+  setupStatsHoverHandlers(encodedType, data, coordinates);
+}
+
+/**
+ * Setup hover handlers for stats items to highlight corresponding route segments
+ */
+function setupStatsHoverHandlers(encodedType, data, coordinates) {
+  const statsItems = document.querySelectorAll('.heightgraph-stat-item');
+  const map = routeState.mapInstance;
+  
+  if (!map || !statsItems.length || !data || !coordinates) {
+    return;
+  }
+  
+  statsItems.forEach(item => {
+    const encodedValue = decodeURIComponent(item.dataset.value);
+    const valueType = item.dataset.encodedType;
+    
+    item.addEventListener('mouseenter', () => {
+      highlightSegmentsByValue(map, valueType, encodedValue, data, coordinates);
+    });
+    
+    item.addEventListener('mouseleave', () => {
+      clearHighlightedSegments(map);
+    });
+  });
+}
+
+/**
+ * Highlight all route segments that match the given value
+ */
+function highlightSegmentsByValue(map, encodedType, targetValue, data, coordinates) {
+  if (!map.getSource('route-hover-segment') || !data || !coordinates) {
+    return;
+  }
+  
+  const segments = [];
+  
+  // Find all segments that match the target value
+  for (let i = 0; i < data.length - 1 && i < coordinates.length - 1; i++) {
+    const value = data[i];
+    
+    if (value === null || value === undefined) {
+      continue;
+    }
+    
+    // Normalize value for comparison
+    let normalizedValue;
+    if (encodedType === 'mapillary_coverage') {
+      const isTrue = value === true || value === 'True' || value === 'true';
+      normalizedValue = isTrue ? 'true' : 'false';
+    } else {
+      normalizedValue = String(value);
+    }
+    
+    // Check if this segment matches the target value
+    if (normalizedValue === targetValue) {
+      const segmentCoords = [
+        coordinates[i],
+        coordinates[i + 1]
+      ];
+      
+      // Get color for the segment
+      const allValues = data;
+      const segmentColor = getColorForEncodedValue(encodedType, value, allValues);
+      
+      segments.push({
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: segmentCoords
+        },
+        properties: {
+          color: segmentColor
+        }
+      });
+    }
+  }
+  
+  // Update the hover segment source with all matching segments
+  if (segments.length > 0) {
+    map.getSource('route-hover-segment').setData({
+      type: 'FeatureCollection',
+      features: segments
+    });
+    
+    // Update layer to use property-based coloring
+    map.setPaintProperty('route-hover-segment-layer', 'line-color', ['get', 'color']);
+  }
+}
+
+/**
+ * Clear highlighted segments
+ */
+function clearHighlightedSegments(map) {
+  if (map.getSource('route-hover-segment')) {
+    map.getSource('route-hover-segment').setData({
+      type: 'FeatureCollection',
+      features: []
+    });
+  }
 }
 
