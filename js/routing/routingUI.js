@@ -9,6 +9,7 @@ import {
   getMapillaryPriority,
   updateMapillaryPriority
 } from './customModel.js';
+import { setupRoutingInputGeocoder } from '../utils/geocoder.js';
 
 export function setupUIHandlers(map) {
   const startBtn = document.getElementById('set-start');
@@ -340,48 +341,77 @@ export function setupUIHandlers(map) {
     }
   });
 
-  // Geocoder integration (if available)
+  // Geocoder integration for start and end inputs
+  let startGeocoderControl = null;
+  let endGeocoderControl = null;
+
   if (startInput) {
-    startInput.addEventListener('change', async (e) => {
-      const query = e.target.value;
-      if (query) {
-        const coords = await geocodeAddress(query);
-        if (coords) {
-          setStartPoint(map, { lng: coords.lng, lat: coords.lat });
-          map.flyTo({ center: [coords.lng, coords.lat], zoom: 14 });
-          
-          // Automatically activate end point selection mode
-          routeState.isSelectingStart = false;
-          routeState.isSelectingEnd = true;
-          map.getCanvas().style.cursor = 'crosshair';
-          if (startBtn) startBtn.classList.remove('active');
-          if (endBtn) endBtn.classList.add('active');
-        }
+    startGeocoderControl = setupRoutingInputGeocoder(startInput, map, ({ lng, lat, address }) => {
+      // Address is already set in input by geocoder, just update the point
+      routeState.startPoint = [lng, lat];
+      updateMarkers(map);
+      map.flyTo({ center: [lng, lat], zoom: 14 });
+      
+      // Automatically activate end point selection mode
+      routeState.isSelectingStart = false;
+      routeState.isSelectingEnd = true;
+      map.getCanvas().style.cursor = 'crosshair';
+      if (startBtn) startBtn.classList.remove('active');
+      if (endBtn) endBtn.classList.add('active');
+      
+      // Automatically calculate route if both points are set
+      if (routeState.startPoint && routeState.endPoint) {
+        import('./routing.js').then(({ calculateRoute }) => {
+          calculateRoute(map, routeState.startPoint, routeState.endPoint, routeState.waypoints);
+        });
       }
     });
   }
 
   if (endInput) {
-    endInput.addEventListener('change', async (e) => {
-      const query = e.target.value;
-      if (query) {
-        const coords = await geocodeAddress(query);
-        if (coords) {
-          setEndPoint(map, { lng: coords.lng, lat: coords.lat });
-          map.flyTo({ center: [coords.lng, coords.lat], zoom: 14 });
-        }
+    endGeocoderControl = setupRoutingInputGeocoder(endInput, map, ({ lng, lat, address }) => {
+      // Address is already set in input by geocoder, just update the point
+      routeState.endPoint = [lng, lat];
+      updateMarkers(map);
+      map.flyTo({ center: [lng, lat], zoom: 14 });
+      
+      // Automatically calculate route if both points are set
+      if (routeState.startPoint && routeState.endPoint) {
+        import('./routing.js').then(({ calculateRoute }) => {
+          calculateRoute(map, routeState.startPoint, routeState.endPoint, routeState.waypoints);
+        });
       }
     });
   }
+  
+  // Store geocoder controls for use in setStartPoint/setEndPoint
+  if (startGeocoderControl) {
+    window.startGeocoderControl = startGeocoderControl;
+  }
+  if (endGeocoderControl) {
+    window.endGeocoderControl = endGeocoderControl;
+  }
 }
 
-export function setStartPoint(map, lngLat) {
+export function setStartPoint(map, lngLat, fromGeocoder = false) {
   routeState.startPoint = [lngLat.lng, lngLat.lat];
   updateMarkers(map);
   
   const startInput = document.getElementById('start-input');
   if (startInput) {
-    startInput.value = `${lngLat.lat.toFixed(5)}, ${lngLat.lng.toFixed(5)}`;
+    if (fromGeocoder) {
+      // Address will be set by geocoder callback, don't override
+      // But mark as from map click if not from geocoder
+      if (window.startGeocoderControl) {
+        window.startGeocoderControl.setFromMapClick(false);
+      }
+    } else {
+      // From map click - show coordinates
+      startInput.value = `${lngLat.lat.toFixed(5)}, ${lngLat.lng.toFixed(5)}`;
+      if (window.startGeocoderControl) {
+        window.startGeocoderControl.setFromMapClick(true);
+      }
+    }
   }
   
   // Automatically calculate route if both points are set
@@ -393,13 +423,25 @@ export function setStartPoint(map, lngLat) {
   }
 }
 
-export function setEndPoint(map, lngLat) {
+export function setEndPoint(map, lngLat, fromGeocoder = false) {
   routeState.endPoint = [lngLat.lng, lngLat.lat];
   updateMarkers(map);
   
   const endInput = document.getElementById('end-input');
   if (endInput) {
-    endInput.value = `${lngLat.lat.toFixed(5)}, ${lngLat.lng.toFixed(5)}`;
+    if (fromGeocoder) {
+      // Address will be set by geocoder callback, don't override
+      // But mark as from map click if not from geocoder
+      if (window.endGeocoderControl) {
+        window.endGeocoderControl.setFromMapClick(false);
+      }
+    } else {
+      // From map click - show coordinates
+      endInput.value = `${lngLat.lat.toFixed(5)}, ${lngLat.lng.toFixed(5)}`;
+      if (window.endGeocoderControl) {
+        window.endGeocoderControl.setFromMapClick(true);
+      }
+    }
   }
   
   // Automatically calculate route if both points are set

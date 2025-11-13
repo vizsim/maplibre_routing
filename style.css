@@ -567,6 +567,27 @@ code {
   font-size: 13px;
 }
 
+/* Geocoder results for routing inputs */
+.routing-input-geocoder-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  max-height: 250px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  font-family: sans-serif;
+}
+
+.input-with-button {
+  position: relative;
+}
+
 /* Mobile responsive */
 @media (max-width: 768px) {
   .geocoder {
@@ -576,6 +597,10 @@ code {
   
   .geocoder-results {
     max-height: 250px;
+  }
+  
+  .routing-input-geocoder-results {
+    max-height: 200px;
   }
 }
 
