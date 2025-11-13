@@ -496,16 +496,16 @@ code {
 }
 
 .map-settings-btn {
-  width: 40px;
-  height: 40px;
+  width: 30px;
+  height: 30px;
   background: white;
-  border: 2px solid #ccc;
-  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
   transition: all 0.2s;
   color: #333;
   padding: 0;
@@ -513,7 +513,7 @@ code {
 
 .map-settings-btn:hover {
   background: #f5f5f5;
-  border-color: #0077ff;
+  border-color: rgba(0, 0, 0, 0.2);
 }
 
 .map-settings-btn:active {
@@ -847,6 +847,14 @@ code {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+.btn-close svg {
+  transition: transform 0.2s;
+}
+
+.btn-close.collapsed svg {
+  transform: rotate(90deg);
 }
 
 .btn-close:hover {

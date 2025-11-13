@@ -725,12 +725,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isCollapsed) {
           // Expand panel
           panel.classList.remove('collapsed');
-          collapseContextBtn.textContent = '▼';
+          collapseContextBtn.classList.remove('collapsed');
           collapseContextBtn.title = 'Einklappen';
         } else {
           // Collapse panel
           panel.classList.add('collapsed');
-          collapseContextBtn.textContent = '▶';
+          collapseContextBtn.classList.add('collapsed');
           collapseContextBtn.title = 'Ausklappen';
         }
       }

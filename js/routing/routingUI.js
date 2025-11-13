@@ -84,12 +84,12 @@ export function setupUIHandlers(map) {
         if (isCollapsed) {
           // Expand panel
           panel.classList.remove('collapsed');
-          collapseBtn.textContent = '▼';
+          collapseBtn.classList.remove('collapsed');
           collapseBtn.title = 'Einklappen';
         } else {
           // Collapse panel
           panel.classList.add('collapsed');
-          collapseBtn.textContent = '▶';
+          collapseBtn.classList.add('collapsed');
           collapseBtn.title = 'Ausklappen';
         }
       }
