@@ -616,23 +616,31 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         });
 
-        // Show/hide legend
+        // Show/hide legend and content
         if (bikelanesLegend) {
           bikelanesLegend.style.display = e.target.checked ? 'flex' : 'none';
+        }
+        // Auto-expand when enabled, auto-collapse when disabled
+        if (bikelanesSegmentContent) {
+          if (e.target.checked) {
+            bikelanesSegmentContent.classList.remove('collapsed');
+          } else {
+            bikelanesSegmentContent.classList.add('collapsed');
+          }
         }
       }
     });
   }
 
-  // Toggle bike lanes segment
+  // Toggle bike lanes segment (click on header to expand/collapse)
   if (toggleBikelanesSegment && bikelanesSegmentContent) {
-    toggleBikelanesSegment.addEventListener('click', () => {
+    toggleBikelanesSegment.addEventListener('click', (e) => {
+      // Don't toggle if clicking on the switch itself
+      if (e.target.closest('.switch-toggle')) {
+        return;
+      }
       const isCollapsed = bikelanesSegmentContent.classList.contains('collapsed');
       bikelanesSegmentContent.classList.toggle('collapsed');
-      const toggleBtn = toggleBikelanesSegment.querySelector('.btn-segment-toggle');
-      if (toggleBtn) {
-        toggleBtn.textContent = isCollapsed ? '▼' : '▶';
-      }
     });
   }
 
@@ -664,21 +672,27 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         });
 
-        // Legend is always visible, but layer visibility is controlled by checkbox
-        // Legend display is not changed here - it stays visible
+        // Auto-expand when enabled, auto-collapse when disabled
+        if (missingStreetsSegmentContent) {
+          if (e.target.checked) {
+            missingStreetsSegmentContent.classList.remove('collapsed');
+          } else {
+            missingStreetsSegmentContent.classList.add('collapsed');
+          }
+        }
       }
     });
   }
 
-  // Toggle missing streets segment
+  // Toggle missing streets segment (click on header to expand/collapse)
   if (toggleMissingStreetsSegment && missingStreetsSegmentContent) {
-    toggleMissingStreetsSegment.addEventListener('click', () => {
+    toggleMissingStreetsSegment.addEventListener('click', (e) => {
+      // Don't toggle if clicking on the switch itself
+      if (e.target.closest('.switch-toggle')) {
+        return;
+      }
       const isCollapsed = missingStreetsSegmentContent.classList.contains('collapsed');
       missingStreetsSegmentContent.classList.toggle('collapsed');
-      const toggleBtn = toggleMissingStreetsSegment.querySelector('.btn-segment-toggle');
-      if (toggleBtn) {
-        toggleBtn.textContent = isCollapsed ? '▼' : '▶';
-      }
     });
   }
 

@@ -255,19 +255,15 @@
               <circle cx="12" cy="13" r="4"></circle>
             </svg>
             <span>Straßensegmente mit...</span>
+            <span class="info-icon-small" title="Quelle: OSM Mapillary Missing Streets; tilda-geo.de">ⓘ</span>
           </div>
-          <button class="btn-segment-toggle" title="Ein-/Ausblenden">▼</button>
+          <label class="switch-toggle">
+            <input type="checkbox" id="toggle-missing-streets" />
+            <span class="switch-slider"></span>
+          </label>
         </div>
         
         <div class="context-segment-content" id="missing-streets-segment-content">
-          <div class="context-toggle">
-            <label>
-              <input type="checkbox" id="toggle-missing-streets" />
-              <span>Fehlende Straßen anzeigen</span>
-              <span class="info-icon-small" title="Quelle: OSM Mapillary Missing Streets; tilda-geo.de">ⓘ</span>
-            </label>
-          </div>
-
           <div class="bikelanes-legend" id="missing-streets-legend">
             <div class="legend-item">
               <span class="legend-line solid" style="background: #174ed9;"></span>
@@ -302,19 +298,15 @@
               <path d="M12 17.5V14l-3-3 4-3 2 3h3"/>
             </svg>
             <span>Radinfrastruktur</span>
+            <span class="info-icon-small" title="Quelle: © OpenStreetMap; tilda-geo.de">ⓘ</span>
           </div>
-          <button class="btn-segment-toggle" title="Ein-/Ausblenden">▶</button>
+          <label class="switch-toggle">
+            <input type="checkbox" id="toggle-bikelanes" />
+            <span class="switch-slider"></span>
+          </label>
         </div>
         
         <div class="context-segment-content collapsed" id="bikelanes-segment-content">
-          <div class="context-toggle">
-            <label>
-              <input type="checkbox" id="toggle-bikelanes" />
-              <span>Radinfrastruktur anzeigen</span>
-              <span class="info-icon-small" title="Quelle: © OpenStreetMap; tilda-geo.de">ⓘ</span>
-            </label>
-          </div>
-
           <div class="bikelanes-legend" id="bikelanes-legend">
             <div class="legend-item">
               <span class="legend-line solid" style="background: #174ed9;"></span>
