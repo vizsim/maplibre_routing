@@ -35,10 +35,16 @@ export function setupPhotonGeocoder(map) {
   let currentResults = [];
 
   async function fetchSuggestions(query) {
-    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&lang=de&limit=5&bbox=5,47,15,55`;
+    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&lang=de&limit=10&bbox=5,47,15,55`;
     const res = await fetch(url);
     const json = await res.json();
-    return json.features || [];
+    // Filter to only show results from Germany
+    const features = (json.features || []).filter(f => {
+      const country = f.properties.country;
+      return country === 'Deutschland' || country === 'Germany' || country === 'DE';
+    });
+    // Limit to 5 results after filtering
+    return features.slice(0, 5);
   }
 
   function formatGeocoderResult(feature) {
@@ -291,10 +297,16 @@ export function setupRoutingInputGeocoder(inputElement, map, onSelect) {
   }
 
   async function fetchSuggestions(query) {
-    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&lang=de&limit=5&bbox=5,47,15,55`;
+    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&lang=de&limit=10&bbox=5,47,15,55`;
     const res = await fetch(url);
     const json = await res.json();
-    return json.features || [];
+    // Filter to only show results from Germany
+    const features = (json.features || []).filter(f => {
+      const country = f.properties.country;
+      return country === 'Deutschland' || country === 'Germany' || country === 'DE';
+    });
+    // Limit to 5 results after filtering
+    return features.slice(0, 5);
   }
 
   function showResults(features) {
