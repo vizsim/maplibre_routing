@@ -63,7 +63,7 @@ export function buildPostRequestBodyWithCustomModel(points, profile, customModel
     profile: graphHopperProfile,
     points_encoded: false,
     elevation: true,
-    details: ['surface', 'mapillary_coverage', 'road_class', 'road_access', 'bicycle_infra'],
+    details: ['surface', 'mapillary_coverage', 'road_class', 'road_access', 'bicycle_infra', 'osm_way_id'],
     custom_model: customModel
   };
   

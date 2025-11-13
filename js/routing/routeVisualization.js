@@ -26,6 +26,58 @@ export function setupRouteHover(map) {
     }
   });
   
+  // Click handler to open OSM way page
+  map.on('click', 'route-layer', (e) => {
+    if (!routeState.currentRouteData || !e.features || e.features.length === 0) {
+      return;
+    }
+    
+    const clickedPoint = e.lngLat;
+    const { coordinates, encodedValues } = routeState.currentRouteData;
+    
+    if (!coordinates || coordinates.length === 0) {
+      return;
+    }
+    
+    // Find the closest coordinate point on the route
+    let closestIndex = 0;
+    let minDistance = Infinity;
+    
+    coordinates.forEach((coord, index) => {
+      const distance = Math.sqrt(
+        Math.pow(coord[0] - clickedPoint.lng, 2) + 
+        Math.pow(coord[1] - clickedPoint.lat, 2)
+      );
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestIndex = index;
+      }
+    });
+    
+    // Get osm_way_id at the closest point
+    let osmWayId = null;
+    if (encodedValues && encodedValues.osm_way_id && encodedValues.osm_way_id[closestIndex] !== null) {
+      osmWayId = encodedValues.osm_way_id[closestIndex];
+    }
+    
+    // If no osm_way_id found, try to find it in nearby points
+    if (osmWayId === null && encodedValues && encodedValues.osm_way_id) {
+      // Check nearby points (within 5 indices)
+      for (let i = Math.max(0, closestIndex - 5); i <= Math.min(coordinates.length - 1, closestIndex + 5); i++) {
+        if (encodedValues.osm_way_id[i] !== null) {
+          osmWayId = encodedValues.osm_way_id[i];
+          break;
+        }
+      }
+    }
+    
+    // Open OSM way page if we have an ID
+    if (osmWayId !== null) {
+      const encodedWayId = encodeURIComponent(osmWayId);
+      window.open(`https://www.openstreetmap.org/way/${encodedWayId}`, '_blank');
+    }
+  });
+  
   map.on('mousemove', 'route-layer', (e) => {
     if (routeState.currentRouteData && e.features && e.features.length > 0) {
       // Use original coordinates from routeState, not segment coordinates

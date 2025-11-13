@@ -12,8 +12,8 @@ import {
   buildPostRequestBodyWithCustomModel
 } from './customModel.js';
 
-// const GRAPHHOPPER_URL = 'http://localhost:8989';
-const GRAPHHOPPER_URL = 'https://ghroute.duckdns.org';
+const GRAPHHOPPER_URL = 'http://localhost:8989';
+// const GRAPHHOPPER_URL = 'https://ghroute.duckdns.org';
 
 // Flag to prevent parallel route calculations
 let routeCalculationInProgress = false;
@@ -51,7 +51,7 @@ function buildGetRequestUrl(points, profileParam) {
   const pointParams = points.map(p => `point=${p[1]},${p[0]}`).join('&');
   const baseUrl = `${GRAPHHOPPER_URL}/route?${pointParams}&profile=${profileParam}&points_encoded=false&elevation=true`;
   const chDisableParam = profileParam === 'car' ? '&ch.disable=true' : '';
-  const detailsParams = ['surface', 'mapillary_coverage', 'road_class', 'road_access', 'bicycle_infra']
+  const detailsParams = ['surface', 'mapillary_coverage', 'road_class', 'road_access', 'bicycle_infra', 'osm_way_id']
     .map(d => `details=${d}`)
     .join('&');
   return `${baseUrl}${chDisableParam}&${detailsParams}&type=json`;
@@ -573,6 +573,8 @@ export async function calculateRoute(map, start, end, waypoints = []) {
         const streetNameArray = new Array(coordinates.length).fill('');
         const customPresentArray = new Array(coordinates.length).fill(null);
         
+        const osmWayIdArray = new Array(coordinates.length).fill(null);
+        
         path.instructions.forEach((inst) => {
           if (inst.interval && Array.isArray(inst.interval) && inst.interval.length === 2) {
             const [startIdx, endIdx] = inst.interval;
@@ -585,9 +587,28 @@ export async function calculateRoute(map, start, end, waypoints = []) {
               if (inst.mapillary_coverage !== undefined) {
                 customPresentArray[i] = inst.mapillary_coverage;
               }
+              // Extract osm_way_id from instruction if available
+              if (inst.osm_way_id !== undefined) {
+                osmWayIdArray[i] = inst.osm_way_id;
+              }
             }
           }
         });
+        
+        // Also check osm_way_id in details
+        if (path.details && path.details.osm_way_id) {
+          const osmWayIdDetails = mapDetailsToCoordinates(path.details.osm_way_id, coordinates.length);
+          for (let i = 0; i < coordinates.length; i++) {
+            if (osmWayIdDetails[i] !== null && osmWayIdArray[i] === null) {
+              osmWayIdArray[i] = osmWayIdDetails[i];
+            }
+          }
+        }
+        
+        // Store OSM way IDs if available
+        if (osmWayIdArray.some(id => id !== null)) {
+          encodedValues.osm_way_id = osmWayIdArray;
+        }
         
         // Store as encoded values for visualization
         encodedValues.time = timeArray;
