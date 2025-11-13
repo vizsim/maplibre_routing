@@ -708,8 +708,7 @@ export async function calculateRoute(map, start, end, waypoints = []) {
         }
         
         // Always show heightgraph if we have elevation or encoded values
-        // Wait for panel positioning to complete before drawing heightgraph
-        // This ensures canvas size is calculated correctly, especially when loading from permalink
+        // The drawHeightgraph function now handles container width detection robustly
         const drawHeightgraphDelayed = () => {
           if (hasElevation && elevations.length > 0) {
             drawHeightgraph(elevations, path.distance, encodedValues, coordinates);
@@ -725,11 +724,9 @@ export async function calculateRoute(map, start, end, waypoints = []) {
           }
         };
         
-        // Show container and ensure it's visible before drawing
-        // The drawHeightgraph function will handle checking for valid width
+        // Show container and trigger panel positioning
         const heightgraphContainer = document.getElementById('heightgraph-container');
         if (heightgraphContainer) {
-          // Show container first so it can be measured
           heightgraphContainer.style.display = 'block';
           
           // Trigger panel positioning to ensure layout is calculated
@@ -738,19 +735,13 @@ export async function calculateRoute(map, start, end, waypoints = []) {
             window.dispatchEvent(new Event('resize'));
           }
           
-          // Wait for layout to settle before drawing
-          // Use multiple requestAnimationFrame calls to ensure layout is fully calculated
+          // Wait for layout to settle - the drawHeightgraph function will handle width detection
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-              // Force a reflow to ensure container has valid dimensions
-              void heightgraphContainer.offsetWidth;
-              requestAnimationFrame(() => {
-                drawHeightgraphDelayed();
-              });
+              drawHeightgraphDelayed();
             });
           });
         } else {
-          // No container, draw immediately (shouldn't happen)
           requestAnimationFrame(() => {
             drawHeightgraphDelayed();
           });
