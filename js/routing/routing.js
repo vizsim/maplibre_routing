@@ -452,7 +452,24 @@ export async function calculateRoute(map, start, end, waypoints = []) {
     // Check response status
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+      let errorMessage = errorText;
+      
+      // Try to parse JSON error message
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.message) {
+          errorMessage = errorJson.message;
+        }
+      } catch (e) {
+        // Not JSON, use text as is
+      }
+      
+      // Check if it's a PointNotFoundException
+      if (errorMessage.includes('PointNotFoundException') || errorMessage.includes('Cannot find point')) {
+        throw new Error('OUT_OF_BOUNDS');
+      }
+      
+      throw new Error(`HTTP error! status: ${response.status}, message: ${errorMessage}`);
     }
     
     const data = await response.json();
@@ -771,10 +788,19 @@ export async function calculateRoute(map, start, end, waypoints = []) {
     }
   } catch (error) {
     console.error('Routing error:', error);
-    if (routeInfo) {
-      routeInfo.textContent = `Fehler: ${error.message}`;
+    
+    // Check if it's an out-of-bounds error
+    let userFriendlyMessage = error.message;
+    if (error.message === 'OUT_OF_BOUNDS' || error.message.includes('PointNotFoundException') || error.message.includes('Cannot find point')) {
+      userFriendlyMessage = 'Aktuell stehen nur Berlin und Brandenburg zur Verfügung.';
     }
-    alert(`Fehler beim Berechnen der Route: ${error.message}`);
+    
+    if (routeInfo) {
+      routeInfo.innerHTML = `<div style="color: #dc2626; padding: 8px; background: #fee2e2; border-radius: 4px; font-size: 13px;">${userFriendlyMessage}</div>`;
+    }
+    
+    // Show alert with user-friendly message
+    alert(`Fehler beim Berechnen der Route: ${userFriendlyMessage}`);
   } finally {
     routeCalculationInProgress = false;
     if (calculateBtn) {

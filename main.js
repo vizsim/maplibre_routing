@@ -59,7 +59,7 @@ async function initMap() {
     style: "./style.json",
     center: [13.42113, 52.47676], // Default center (Berlin)
     zoom: 12,                  // Default zoom
-    minZoom: 9,
+    minZoom: 7,
     maxZoom: 20
   });
 
