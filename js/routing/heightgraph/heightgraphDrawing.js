@@ -34,22 +34,47 @@ export function drawGrid(ctx, padding, graphWidth, graphHeight, baseData) {
     }
   }
   
-  // Calculate ticks in 5 or 10 meter steps
+  // Calculate ticks with step sizes: 5, 10, 20, 50, 100
+  // Maximum 8 ticks to avoid overcrowding
   const calculateNiceTicks = (min, max) => {
     const range = max - min;
-    const step = range < 35 ? 5 : 10;
+    const stepSizes = [5, 10, 20, 50, 100];
+    
+    // Find the smallest step size that results in 8 or fewer ticks
+    let step = stepSizes[stepSizes.length - 1]; // Default to largest step
+    
+    for (const candidateStep of stepSizes) {
+      const tickMin = Math.floor(min / candidateStep) * candidateStep;
+      const tickMax = Math.ceil(max / candidateStep) * candidateStep;
+      const numTicks = Math.floor((tickMax - tickMin) / candidateStep) + 1;
+      
+      if (numTicks <= 8) {
+        step = candidateStep;
+        break;
+      }
+    }
+    
     const tickMin = Math.floor(min / step) * step;
     const tickMax = Math.ceil(max / step) * step;
     const ticks = [];
     for (let value = tickMin; value <= tickMax; value += step) {
       ticks.push(value);
     }
+    
     return { ticks, step };
   };
   
   const { ticks } = calculateNiceTicks(elevationMin, elevationMax);
   
   // Draw grid lines and labels
+  // Set font once for measuring text width
+  ctx.fillStyle = HEIGHTGRAPH_CONFIG.colors.text;
+  ctx.font = `${HEIGHTGRAPH_CONFIG.font.size} ${HEIGHTGRAPH_CONFIG.font.family}`;
+  ctx.textAlign = 'right';
+  
+  // Position labels with enough space (5px margin from left edge of graph)
+  const labelX = padding.left - 5;
+  
   ticks.forEach((elevationValue) => {
     const y = padding.top + graphHeight - ((elevationValue - elevationMin) / elevationRange) * graphHeight;
     
@@ -63,10 +88,7 @@ export function drawGrid(ctx, padding, graphWidth, graphHeight, baseData) {
       
       if (!yLabels.has(labelText)) {
         yLabels.add(labelText);
-        ctx.fillStyle = HEIGHTGRAPH_CONFIG.colors.text;
-        ctx.font = `${HEIGHTGRAPH_CONFIG.font.size} ${HEIGHTGRAPH_CONFIG.font.family}`;
-        ctx.textAlign = 'right';
-        ctx.fillText(labelText, padding.left - 3, y + 3);
+        ctx.fillText(labelText, labelX, y + 3);
       }
     }
   });
@@ -134,7 +156,9 @@ export function drawXAxisLabels(ctx, padding, graphWidth, graphHeight, actualTot
     
     if (x >= padding.left && x <= padding.left + graphWidth) {
       const labelText = (distance % 1 === 0 ? distance.toFixed(0) : distance.toFixed(1)) + ' km';
-      ctx.fillText(labelText, x, height - 5);
+      // Position labels closer to the graph (just below the graph area)
+      const labelY = padding.top + graphHeight + 12;
+      ctx.fillText(labelText, x, labelY);
     }
   }
 }

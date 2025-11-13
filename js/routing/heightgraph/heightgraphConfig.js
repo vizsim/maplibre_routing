@@ -10,7 +10,7 @@ export const HEIGHTGRAPH_CONFIG = {
     top: 20,
     right: 5,
     bottom: 30,
-    left: 25
+    left: 35  // Increased to accommodate 3-digit elevation values (e.g., "100 m")
   },
   grid: {
     steps: 5
