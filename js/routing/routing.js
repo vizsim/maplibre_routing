@@ -773,16 +773,48 @@ export async function calculateRoute(map, start, end, waypoints = []) {
         return bounds.extend(coord);
       }, new maplibregl.LngLatBounds(coordinates[0], coordinates[0]));
       
-      // Account for right-side panels (routing panel: 320px + context panel: 320px + margins)
-      const rightPanelWidth = 320 + 10; // Panel width + right margin
-      map.fitBounds(bounds, {
-        padding: {
+      // Calculate responsive padding based on viewport size
+      const isMobile = window.innerWidth < 768;
+      let padding;
+      
+      if (isMobile) {
+        // On mobile: minimal padding, panels are usually collapsed or smaller
+        padding = {
+          top: 20,
+          right: 20,
+          bottom: 20,
+          left: 20
+        };
+      } else {
+        // On desktop: account for right-side panels (routing panel: 320px + context panel: 320px + margins)
+        const routingPanel = document.querySelector('.routing-panel');
+        const contextPanel = document.querySelector('.context-panel');
+        
+        // Calculate actual panel widths dynamically
+        let rightPanelWidth = 0;
+        if (routingPanel && !routingPanel.classList.contains('collapsed')) {
+          const routingRect = routingPanel.getBoundingClientRect();
+          rightPanelWidth += routingRect.width + 10; // Panel width + margin
+        }
+        if (contextPanel && !contextPanel.classList.contains('collapsed')) {
+          const contextRect = contextPanel.getBoundingClientRect();
+          rightPanelWidth += contextRect.width + 10; // Panel width + margin
+        }
+        
+        // Fallback to default if no panels found
+        if (rightPanelWidth === 0) {
+          rightPanelWidth = 320 + 10; // Default routing panel width
+        }
+        
+        padding = {
           top: 50,
           right: rightPanelWidth + 20, // Extra padding for visibility
           bottom: 50,
           left: 50
-        }
-      });
+        };
+      }
+      
+      map.fitBounds(bounds, { padding });
     } else {
       throw new Error('Keine Route gefunden');
     }
