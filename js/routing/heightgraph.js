@@ -151,7 +151,11 @@ export function cleanupHeightgraphHandlers() {
   const indicatorCanvas = document.getElementById('heightgraph-indicator-canvas');
   if (indicatorCanvas) {
     const ctx = indicatorCanvas.getContext('2d');
-    ctx.clearRect(0, 0, indicatorCanvas.width, indicatorCanvas.height);
+    // Get logical size (CSS size) for clearRect
+    const rect = indicatorCanvas.getBoundingClientRect();
+    const logicalWidth = rect.width;
+    const logicalHeight = rect.height;
+    ctx.clearRect(0, 0, logicalWidth, logicalHeight);
   }
   
   // Remove tooltip if it exists
@@ -269,16 +273,25 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
   const maxWidth = container.clientWidth || HEIGHTGRAPH_CONFIG.canvas.defaultWidth;
   const width = Math.max(HEIGHTGRAPH_CONFIG.canvas.minWidth, maxWidth);
   const height = HEIGHTGRAPH_CONFIG.canvas.height;
-  canvas.width = width;
-  canvas.height = height;
-  // Ensure CSS size matches actual canvas size to avoid scaling issues
+  
+  // Get device pixel ratio for high-DPI displays
+  const dpr = window.devicePixelRatio || 1;
+  
+  // Set CSS size (logical size)
   canvas.style.width = width + 'px';
   canvas.style.height = height + 'px';
   canvas.style.maxWidth = '100%'; // Prevent overflow
   
+  // Set actual canvas size (physical pixels) for high-DPI
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  
   const ctx = canvas.getContext('2d');
   
-  // Clear canvas
+  // Scale context to match device pixel ratio
+  ctx.scale(dpr, dpr);
+  
+  // Clear canvas (use logical size for clearRect)
   ctx.clearRect(0, 0, width, height);
   
   if (dataToVisualize.length < 2) return;
@@ -404,11 +417,16 @@ export function drawHeightgraph(elevations, totalDistance, encodedValues = {}, c
   if (!skipInteractivity) {
     // Also setup indicator canvas
     if (indicatorCanvas) {
-      indicatorCanvas.width = canvas.width;
-      indicatorCanvas.height = canvas.height;
-      // Ensure CSS size matches actual canvas size to avoid scaling issues
-      indicatorCanvas.style.width = canvas.width + 'px';
-      indicatorCanvas.style.height = canvas.height + 'px';
+      const dpr = window.devicePixelRatio || 1;
+      // Set CSS size (logical size)
+      indicatorCanvas.style.width = width + 'px';
+      indicatorCanvas.style.height = height + 'px';
+      // Set actual canvas size (physical pixels) for high-DPI
+      indicatorCanvas.width = width * dpr;
+      indicatorCanvas.height = height * dpr;
+      // Scale context to match device pixel ratio
+      const indicatorCtx = indicatorCanvas.getContext('2d');
+      indicatorCtx.scale(dpr, dpr);
     }
     setupHeightgraphInteractivity(canvas, baseData, actualTotalDistance, coordinates, cumulativeDistances);
   }
@@ -897,7 +915,11 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
       const indicatorCanvas = document.getElementById('heightgraph-indicator-canvas');
       if (indicatorCanvas) {
         const indicatorCtx = indicatorCanvas.getContext('2d');
-        indicatorCtx.clearRect(0, 0, indicatorCanvas.width, indicatorCanvas.height);
+        // Get logical size (CSS size) for clearRect
+        const rect = indicatorCanvas.getBoundingClientRect();
+        const logicalWidth = rect.width;
+        const logicalHeight = rect.height;
+        indicatorCtx.clearRect(0, 0, logicalWidth, logicalHeight);
       }
       return;
     }
@@ -1076,8 +1098,19 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
         if (indicatorCanvas) {
           const indicatorCtx = indicatorCanvas.getContext('2d');
           
-          // Clear previous indicator line
-          indicatorCtx.clearRect(0, 0, indicatorCanvas.width, indicatorCanvas.height);
+          // Ensure context is scaled for high-DPI (if not already)
+          const dpr = window.devicePixelRatio || 1;
+          if (indicatorCanvas._dpr !== dpr) {
+            indicatorCanvas._dpr = dpr;
+            indicatorCtx.scale(dpr, dpr);
+          }
+          
+          // Get logical size (CSS size) for clearRect
+          const logicalWidth = actualCanvasWidth;
+          const logicalHeight = actualCanvasHeight;
+          
+          // Clear previous indicator line (use logical size)
+          indicatorCtx.clearRect(0, 0, logicalWidth, logicalHeight);
           
           // Calculate the X position based on the segment midpoint
           // This ensures the indicator line matches the segment, not just mouse position
@@ -1123,7 +1156,17 @@ function setupHeightgraphInteractivity(canvas, elevations, totalDistance, coordi
     const indicatorCanvas = document.getElementById('heightgraph-indicator-canvas');
     if (indicatorCanvas) {
       const indicatorCtx = indicatorCanvas.getContext('2d');
-      indicatorCtx.clearRect(0, 0, indicatorCanvas.width, indicatorCanvas.height);
+      // Ensure context is scaled for high-DPI (if not already)
+      const dpr = window.devicePixelRatio || 1;
+      if (indicatorCanvas._dpr !== dpr) {
+        indicatorCanvas._dpr = dpr;
+        indicatorCtx.scale(dpr, dpr);
+      }
+      // Get logical size (CSS size) for clearRect
+      const rect = indicatorCanvas.getBoundingClientRect();
+      const logicalWidth = rect.width;
+      const logicalHeight = rect.height;
+      indicatorCtx.clearRect(0, 0, logicalWidth, logicalHeight);
     }
   };
   
