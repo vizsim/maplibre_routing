@@ -6,7 +6,8 @@ import {
   supportsCustomModel,
   ensureCustomModel,
   isDefaultCustomModel,
-  getMapillaryPriority
+  getMapillaryPriority,
+  updateMapillaryPriority
 } from '../routing/customModel.js';
 
 export class Permalink {
@@ -100,7 +101,7 @@ export class Permalink {
   updateURL() {
     if (this.isUpdating) return;
     
-    const params = new URLSearchParams();
+    const paramParts = [];
     
     // Map state
     const center = this.map.getCenter();
@@ -109,49 +110,45 @@ export class Permalink {
     const lat = Math.round(center.lat * 1000) / 1000;
     const zoomRounded = Math.round(zoom * 10) / 10;
     
-    params.set('map', `${zoomRounded}/${lat}/${lng}`);
+    paramParts.push(`map=${zoomRounded}/${lat}/${lng}`);
     
-    // Route points
+    // Route points (using / separator like map parameter)
     if (routeState.startPoint) {
       const [startLng, startLat] = routeState.startPoint;
-      params.set('start', `${Math.round(startLat * 10000) / 10000},${Math.round(startLng * 10000) / 10000}`);
+      paramParts.push(`start=${Math.round(startLat * 10000) / 10000}/${Math.round(startLng * 10000) / 10000}`);
     }
     
     if (routeState.endPoint) {
       const [endLng, endLat] = routeState.endPoint;
-      params.set('end', `${Math.round(endLat * 10000) / 10000},${Math.round(endLng * 10000) / 10000}`);
+      paramParts.push(`end=${Math.round(endLat * 10000) / 10000}/${Math.round(endLng * 10000) / 10000}`);
     }
     
     // Waypoints
     routeState.waypoints.forEach(waypoint => {
       const [lng, lat] = waypoint;
-      params.append('waypoint', `${Math.round(lat * 10000) / 10000},${Math.round(lng * 10000) / 10000}`);
+      paramParts.push(`waypoint=${Math.round(lat * 10000) / 10000}/${Math.round(lng * 10000) / 10000}`);
     });
     
     // Profile
     if (routeState.selectedProfile && routeState.selectedProfile !== 'car') {
-      params.set('profile', routeState.selectedProfile);
+      paramParts.push(`profile=${encodeURIComponent(routeState.selectedProfile)}`);
     }
     
     // Custom model (for car_customizable profile)
-    // Only include custom_model in URL if it differs from the default
+    // Only include mapillary_weight in URL if it differs from the default
     if (supportsCustomModel(routeState.selectedProfile) && routeState.customModel) {
-      if (!isDefaultCustomModel(routeState.customModel)) {
-        // Only add to URL if it's not the default model
-        try {
-          const customModelStr = typeof routeState.customModel === 'string' 
-            ? routeState.customModel 
-            : JSON.stringify(routeState.customModel);
-          params.set('custom_model', customModelStr);
-        } catch (error) {
-          console.warn('Failed to stringify customModel for URL:', error);
-        }
+      const currentWeight = getMapillaryPriority(routeState.customModel);
+      const defaultWeight = getMapillaryPriority(routeState.defaultCustomModel);
+      
+      // Only add to URL if it differs from the default (0.1)
+      if (currentWeight !== null && currentWeight !== undefined && currentWeight !== defaultWeight) {
+        paramParts.push(`mapillary_weight=${currentWeight.toString()}`);
       }
     }
     
     // Encoded value type
     if (routeState.currentEncodedType && routeState.currentEncodedType !== 'mapillary_coverage') {
-      params.set('encoded', routeState.currentEncodedType);
+      paramParts.push(`encoded=${encodeURIComponent(routeState.currentEncodedType)}`);
     }
     
     // Context layers
@@ -159,14 +156,14 @@ export class Permalink {
     const toggleMissingStreets = document.getElementById('toggle-missing-streets');
     
     if (toggleBikelanes && toggleBikelanes.checked) {
-      params.set('bikelanes', '1');
+      paramParts.push('bikelanes=1');
     }
     
     if (toggleMissingStreets && toggleMissingStreets.checked) {
-      params.set('missingStreets', '1');
+      paramParts.push('missingStreets=1');
     }
     
-    const newURL = `${window.location.pathname}?${params.toString()}`;
+    const newURL = `${window.location.pathname}?${paramParts.join('&')}`;
     window.history.replaceState({}, '', newURL);
   }
 
@@ -199,7 +196,9 @@ export class Permalink {
     const pointParams = params.getAll('point');
     
     if (startParam) {
-      const [lat, lng] = startParam.split(',').map(parseFloat);
+      // Support both / and , separators (backwards compatibility)
+      const separator = startParam.includes('/') ? '/' : ',';
+      const [lat, lng] = startParam.split(separator).map(parseFloat);
       if (!isNaN(lat) && !isNaN(lng)) {
         routeState.startPoint = [lng, lat];
         // Update input field
@@ -210,7 +209,8 @@ export class Permalink {
       }
     } else if (pointParams.length >= 1) {
       // Support 'point' parameter format (GraphHopper style)
-      const [lat, lng] = pointParams[0].split(',').map(parseFloat);
+      const separator = pointParams[0].includes('/') ? '/' : ',';
+      const [lat, lng] = pointParams[0].split(separator).map(parseFloat);
       if (!isNaN(lat) && !isNaN(lng)) {
         routeState.startPoint = [lng, lat];
         const startInput = document.getElementById('start-input');
@@ -222,7 +222,9 @@ export class Permalink {
     
     const endParam = params.get('end');
     if (endParam) {
-      const [lat, lng] = endParam.split(',').map(parseFloat);
+      // Support both / and , separators (backwards compatibility)
+      const separator = endParam.includes('/') ? '/' : ',';
+      const [lat, lng] = endParam.split(separator).map(parseFloat);
       if (!isNaN(lat) && !isNaN(lng)) {
         routeState.endPoint = [lng, lat];
         // Update input field
@@ -233,7 +235,8 @@ export class Permalink {
       }
     } else if (pointParams.length >= 2) {
       // Support 'point' parameter format (GraphHopper style)
-      const [lat, lng] = pointParams[1].split(',').map(parseFloat);
+      const separator = pointParams[1].includes('/') ? '/' : ',';
+      const [lat, lng] = pointParams[1].split(separator).map(parseFloat);
       if (!isNaN(lat) && !isNaN(lng)) {
         routeState.endPoint = [lng, lat];
         const endInput = document.getElementById('end-input');
@@ -247,7 +250,9 @@ export class Permalink {
     const waypointParams = params.getAll('waypoint');
     routeState.waypoints = [];
     waypointParams.forEach(waypointParam => {
-      const [lat, lng] = waypointParam.split(',').map(parseFloat);
+      // Support both / and , separators (backwards compatibility)
+      const separator = waypointParam.includes('/') ? '/' : ',';
+      const [lat, lng] = waypointParam.split(separator).map(parseFloat);
       if (!isNaN(lat) && !isNaN(lng)) {
         routeState.waypoints.push([lng, lat]);
       }
@@ -259,9 +264,22 @@ export class Permalink {
       updateWaypointsList();
     }
     
-    // Load custom model first (before profile, so we can set profile based on custom_model)
-    const customModelParam = params.get('custom_model');
-    if (customModelParam) {
+    // Load mapillary_weight (for car_customizable profile)
+    // Support both old 'custom_model' format (for backwards compatibility) and new 'mapillary_weight' format
+    const mapillaryWeightParam = params.get('mapillary_weight');
+    const customModelParam = params.get('custom_model'); // Legacy support
+    
+    if (mapillaryWeightParam) {
+      // New format: only mapillary_weight
+      const weight = parseFloat(mapillaryWeightParam);
+      if (!isNaN(weight)) {
+        // Ensure custom model is initialized
+        routeState.customModel = ensureCustomModel(routeState.customModel);
+        // Update mapillary priority
+        routeState.customModel = updateMapillaryPriority(routeState.customModel, weight);
+      }
+    } else if (customModelParam) {
+      // Legacy format: full custom model (for backwards compatibility)
       try {
         // Try to parse as JSON, if it fails, store as string
         try {
@@ -278,8 +296,8 @@ export class Permalink {
     // Load profile
     const profileParam = params.get('profile');
     if (profileParam) {
-      // If custom_model is present and profile is 'car', switch to 'car_customizable'
-      if (profileParam === 'car' && customModelParam) {
+      // If mapillary_weight or custom_model is present and profile is 'car', switch to 'car_customizable'
+      if (profileParam === 'car' && (mapillaryWeightParam || customModelParam)) {
         routeState.selectedProfile = 'car_customizable';
       } else {
         routeState.selectedProfile = profileParam;
@@ -296,8 +314,8 @@ export class Permalink {
           btn.classList.add('active');
         }
       });
-    } else if (customModelParam) {
-      // If custom_model is present but no profile specified, use car_customizable
+    } else if (mapillaryWeightParam || customModelParam) {
+      // If mapillary_weight or custom_model is present but no profile specified, use car_customizable
       routeState.selectedProfile = 'car_customizable';
       document.querySelectorAll('.profile-btn').forEach(btn => {
         btn.classList.remove('active');
@@ -471,68 +489,61 @@ export class Permalink {
 
   // Method to generate shareable URL
   getShareableURL() {
-    const params = new URLSearchParams();
+    const paramParts = [];
     
     const center = this.map.getCenter();
     const zoom = this.map.getZoom();
     const mapParam = `${Math.round(zoom * 10) / 10}/${Math.round(center.lat * 1000) / 1000}/${Math.round(center.lng * 1000) / 1000}`;
-    params.set('map', mapParam);
+    paramParts.push(`map=${mapParam}`);
     
     if (routeState.startPoint) {
       const [lng, lat] = routeState.startPoint;
-      params.set('start', `${Math.round(lat * 10000) / 10000},${Math.round(lng * 10000) / 10000}`);
+      paramParts.push(`start=${Math.round(lat * 10000) / 10000}/${Math.round(lng * 10000) / 10000}`);
     }
     
     if (routeState.endPoint) {
       const [lng, lat] = routeState.endPoint;
-      params.set('end', `${Math.round(lat * 10000) / 10000},${Math.round(lng * 10000) / 10000}`);
+      paramParts.push(`end=${Math.round(lat * 10000) / 10000}/${Math.round(lng * 10000) / 10000}`);
     }
     
     // Add waypoints
     routeState.waypoints.forEach(waypoint => {
       const [lng, lat] = waypoint;
-      params.append('waypoint', `${Math.round(lat * 10000) / 10000},${Math.round(lng * 10000) / 10000}`);
+      paramParts.push(`waypoint=${Math.round(lat * 10000) / 10000}/${Math.round(lng * 10000) / 10000}`);
     });
     
     if (routeState.selectedProfile && routeState.selectedProfile !== 'car') {
-      params.set('profile', routeState.selectedProfile);
+      paramParts.push(`profile=${encodeURIComponent(routeState.selectedProfile)}`);
     }
     
     // Custom model (for car_customizable profile)
-    // Only include custom_model in URL if it differs from the default
+    // Only include mapillary_weight in URL if it differs from the default
     if (routeState.selectedProfile === 'car_customizable' && routeState.customModel) {
-      // Check if customModel differs from defaultCustomModel
-      const isDefaultModel = JSON.stringify(routeState.customModel) === JSON.stringify(routeState.defaultCustomModel);
+      const currentWeight = getMapillaryPriority(routeState.customModel);
+      const defaultWeight = getMapillaryPriority(routeState.defaultCustomModel);
       
-      if (!isDefaultModel) {
-        // Only add to URL if it's not the default model
-        try {
-          const customModelStr = typeof routeState.customModel === 'string' 
-            ? routeState.customModel 
-            : JSON.stringify(routeState.customModel);
-          params.set('custom_model', customModelStr);
-        } catch (error) {
-          console.warn('Failed to stringify customModel for shareable URL:', error);
-        }
+      // Only add to URL if it differs from the default (0.1)
+      if (currentWeight !== null && currentWeight !== undefined && currentWeight !== defaultWeight) {
+        paramParts.push(`mapillary_weight=${currentWeight.toString()}`);
       }
     }
     
     if (routeState.currentEncodedType && routeState.currentEncodedType !== 'mapillary_coverage') {
-      params.set('encoded', routeState.currentEncodedType);
+      paramParts.push(`encoded=${encodeURIComponent(routeState.currentEncodedType)}`);
     }
     
     const toggleBikelanes = document.getElementById('toggle-bikelanes');
     const toggleMissingStreets = document.getElementById('toggle-missing-streets');
     
     if (toggleBikelanes && toggleBikelanes.checked) {
-      params.set('bikelanes', '1');
+      paramParts.push('bikelanes=1');
     }
     
     if (toggleMissingStreets && toggleMissingStreets.checked) {
-      params.set('missingStreets', '1');
+      paramParts.push('missingStreets=1');
     }
     
-    return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+    return `${window.location.origin}${window.location.pathname}?${paramParts.join('&')}`;
   }
 }
 
