@@ -1755,19 +1755,40 @@ input[type="range"].slider::-moz-range-thumb,
     padding: 12px;
   }
 
-  /* Larger switches */
+  /* Larger switches for context panel */
   .switch-toggle {
     width: 52px;
     height: 28px;
   }
 
-  .switch-slider:before {
+  .switch-toggle .switch-slider:before {
     height: 22px;
     width: 22px;
+  }
+  
+  /* Ensure map-settings switches don't get affected by switch-toggle styles */
+  .map-settings-panel .switch-slider:before {
+    height: 18px;
+    width: 18px;
+  }
+  
+  .map-settings-panel .switch input:checked + .switch-slider:before {
+    transform: translateX(20px);
   }
 
   .switch-toggle input:checked + .switch-slider:before {
     transform: translateX(24px);
+  }
+  
+  /* Keep map-settings switches aligned properly on mobile */
+  .map-settings-panel .switch {
+    margin-left: 12px;
+    flex-shrink: 0;
+  }
+  
+  .map-settings-panel .switch-label {
+    align-items: center;
+    justify-content: space-between;
   }
 
   /* Bottom-left UI: Keep horizontal on mobile */
