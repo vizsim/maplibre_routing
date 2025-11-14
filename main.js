@@ -801,83 +801,18 @@ document.addEventListener('DOMContentLoaded', () => {
       const isRoutingCollapsed = routingPanel.classList.contains('collapsed');
       const isContextCollapsed = contextPanel.classList.contains('collapsed');
       
-      // If routing panel is collapsed, always position context panel directly below it
-      if (isRoutingCollapsed) {
-        // Routing panel is collapsed: context panel goes directly below
-        const totalNeededHeight = routingNaturalHeight + contextPanel.scrollHeight + padding;
-        
-        if (totalNeededHeight <= availableViewportHeight) {
-          // Enough space: both panels get their natural size
-          routingActualMaxHeight = 'none';
-          contextActualMaxHeight = contextPanel.scrollHeight;
-        } else {
-          // Not enough space: limit routing panel
-          const routingMaxHeight = availableViewportHeight - contextPanel.scrollHeight - padding;
-          routingActualMaxHeight = `${routingMaxHeight}px`;
-          contextActualMaxHeight = contextPanel.scrollHeight;
-        }
-      } else if (isMobile) {
-        if (isContextCollapsed) {
-          // Mobile + Collapsed: Position context panel directly below routing panel (like desktop)
-          const totalNeededHeight = routingNaturalHeight + contextPanel.scrollHeight + padding;
-          
-          if (totalNeededHeight <= availableViewportHeight) {
-            // Enough space: both panels get their natural size
-            routingActualMaxHeight = 'none';
-            contextActualMaxHeight = contextPanel.scrollHeight; // Just header height when collapsed
-          } else {
-            // Not enough space: limit routing panel
-            const routingMaxHeight = availableViewportHeight - contextPanel.scrollHeight - padding;
-            routingActualMaxHeight = `${routingMaxHeight}px`;
-            contextActualMaxHeight = contextPanel.scrollHeight;
-          }
-        } else {
-          // Mobile + Expanded: Context panel gets as much space as it needs, positioned as low as possible
-          // Routing panel gets the remaining space
-          
-          // Calculate maximum bottom position for context panel (just above controls/geocoder)
-          const maxBottom = viewportHeight - bottomSpace - bottomPadding;
-          
-          // Context panel should use its natural height if it fits, otherwise use available space
-          if (contextNaturalHeight <= (maxBottom - topPadding - padding)) {
-            // Natural height fits, use it
-            contextActualMaxHeight = contextNaturalHeight;
-          } else {
-            // Natural height doesn't fit, use maximum available space
-            contextActualMaxHeight = maxBottom - topPadding - padding;
-          }
-          
-          // Calculate where context panel should start (from bottom)
-          const contextTop = maxBottom - contextActualMaxHeight;
-          
-          // Routing panel gets the space above context panel
-          const routingMaxHeight = contextTop - topPadding - padding;
-          
-          if (routingNaturalHeight <= routingMaxHeight) {
-            // Routing panel fits in available space
-            routingActualMaxHeight = 'none'; // Use natural height
-          } else {
-            // Routing panel needs to be limited
-            routingActualMaxHeight = `${routingMaxHeight}px`;
-          }
-        }
+      // Always position context panel directly below routing panel
+      const totalNeededHeight = routingNaturalHeight + contextPanel.scrollHeight + padding;
+      
+      if (totalNeededHeight <= availableViewportHeight) {
+        // Enough space: both panels get their natural size
+        routingActualMaxHeight = 'none';
+        contextActualMaxHeight = contextPanel.scrollHeight;
       } else {
-        // Desktop: original logic
-        const routingMaxHeight = availableViewportHeight * 0.7;  // Desktop: routing max 70%
-        const contextMaxHeight = availableViewportHeight * 0.3; // Desktop: context max 30%
-        
-        // Check if both panels fit in their natural size
-        const totalNeededHeight = routingNaturalHeight + contextNaturalHeight + padding;
-        
-        if (totalNeededHeight <= availableViewportHeight) {
-          // Enough space: both panels get their natural size
-          routingActualMaxHeight = 'none'; // No limit, use natural height
-          contextActualMaxHeight = availableViewportHeight - routingNaturalHeight - padding;
-        } else {
-          // Not enough space: apply limits
-          routingActualMaxHeight = `${routingMaxHeight}px`;
-          contextActualMaxHeight = Math.min(contextMaxHeight, availableViewportHeight - routingMaxHeight - padding);
-        }
+        // Not enough space: limit routing panel
+        const routingMaxHeight = availableViewportHeight - contextPanel.scrollHeight - padding;
+        routingActualMaxHeight = `${routingMaxHeight}px`;
+        contextActualMaxHeight = contextPanel.scrollHeight;
       }
       
       // Apply max-height to routing panel (only if it changed)
@@ -895,36 +830,14 @@ document.addEventListener('DOMContentLoaded', () => {
         
         let contextTop, finalMaxHeight;
         
-        // Check if routing panel is collapsed
-        const isRoutingCollapsed = routingPanel.classList.contains('collapsed');
+        // Always position context panel directly below routing panel
+        contextTop = routingBottomCalculated + padding;
         
-        if (isRoutingCollapsed) {
-          // Routing panel is collapsed: always position context panel directly below it
-          contextTop = routingBottomCalculated + padding;
-          finalMaxHeight = contextActualMaxHeight;
-        } else if (isMobile) {
-          // Check if context panel is collapsed
-          const isContextCollapsed = contextPanel.classList.contains('collapsed');
-          
-          if (isContextCollapsed) {
-            // Mobile + Collapsed: Position context panel directly below routing panel
-            contextTop = routingBottomCalculated + padding;
-            finalMaxHeight = contextActualMaxHeight;
-          } else {
-            // Mobile + Expanded: Position context panel from bottom (as low as possible)
-            // Context panel top is calculated from bottom: maxBottom - contextActualMaxHeight
-            contextTop = maxBottom - contextActualMaxHeight;
-            finalMaxHeight = contextActualMaxHeight;
-          }
-        } else {
-          // Desktop: Position context panel below routing panel
-          contextTop = routingBottomCalculated + padding;
-          const maxContextHeightFromAttribution = Math.max(0, maxBottom - contextTop); // Ensure non-negative
-          
-          // Always respect attribution constraint to avoid overlap
-          // Use the smaller of contextActualMaxHeight and maxContextHeightFromAttribution
-          finalMaxHeight = Math.min(contextActualMaxHeight, maxContextHeightFromAttribution);
-        }
+        // Calculate maximum height respecting bottom constraints (attribution on desktop, controls/geocoder on mobile)
+        const maxContextHeightFromBottom = Math.max(0, maxBottom - contextTop); // Ensure non-negative
+        
+        // Use the smaller of contextActualMaxHeight and maxContextHeightFromBottom to avoid overlap
+        finalMaxHeight = Math.min(contextActualMaxHeight, maxContextHeightFromBottom);
         
         // Position context panel
         contextPanel.style.top = `${contextTop}px`;
