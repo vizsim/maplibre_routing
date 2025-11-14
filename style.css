@@ -591,12 +591,23 @@ code {
 /* Mobile responsive */
 @media (max-width: 768px) {
   .geocoder {
+    position: absolute;
+    top: auto;
+    bottom: 40px; /* Above attribution (~30px) with some padding */
+    left: auto;
+    right: 10px;
     width: calc(100vw - 20px);
-    max-width: 400px;
+    max-width: calc(100vw - 200px); /* Leave space for controls on left */
+    z-index: 2; /* Above attribution, below panels */
   }
   
   .geocoder-results {
     max-height: 250px;
+    /* Position results above input when open */
+    position: absolute;
+    bottom: 100%;
+    margin-bottom: 4px;
+    margin-top: 0;
   }
   
   .routing-input-geocoder-results {
@@ -1759,12 +1770,27 @@ input[type="range"].slider::-moz-range-thumb,
     transform: translateX(24px);
   }
 
-  /* Bottom-left UI: Stack vertically on mobile */
+  /* Bottom-left UI: Keep horizontal on mobile */
   #bottom-left-ui-container {
-    flex-direction: column;
+    flex-direction: row;
     gap: 8px;
     bottom: 5px;
     left: 5px;
+    flex-wrap: wrap;
+  }
+  
+  /* Ensure panels don't overlap with bottom geocoder and controls */
+  .routing-panel,
+  .context-panel {
+    /* 
+     * top: 5px
+     * Geocoder: bottom: 40px + height ~50px = 90px from bottom
+     * Controls: bottom: 10px + height ~50px = 60px from bottom
+     * Use the higher value (Geocoder) + padding: 10px = 100px total
+     * Reduced to 100px to give context panel more space
+     */
+    max-height: calc(100vh - 5px - 170px); /* Give more space for context panel */
+    overflow-y: auto;
   }
 
   /* Smaller basemap thumbs on mobile */

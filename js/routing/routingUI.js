@@ -93,6 +93,9 @@ export function setupUIHandlers(map) {
           collapseBtn.classList.add('collapsed');
           collapseBtn.title = 'Ausklappen';
         }
+        
+        // Trigger panel positioning update
+        window.dispatchEvent(new CustomEvent('routingPanelToggled'));
       }
     });
   }

@@ -715,28 +715,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Collapse/expand context panel handler
-  const collapseContextBtn = document.getElementById('collapse-context-panel');
-  if (collapseContextBtn) {
-    collapseContextBtn.addEventListener('click', () => {
-      const panel = document.querySelector('.context-panel');
-      if (panel) {
-        const isCollapsed = panel.classList.contains('collapsed');
-        if (isCollapsed) {
-          // Expand panel
-          panel.classList.remove('collapsed');
-          collapseContextBtn.classList.remove('collapsed');
-          collapseContextBtn.title = 'Einklappen';
-        } else {
-          // Collapse panel
-          panel.classList.add('collapsed');
-          collapseContextBtn.classList.add('collapsed');
-          collapseContextBtn.title = 'Ausklappen';
-        }
-      }
-    });
-  }
-
   // Position context panel below routing panel
   const routingPanel = document.querySelector('.routing-panel');
   const contextPanel = document.querySelector('.context-panel');
@@ -767,35 +745,139 @@ document.addEventListener('DOMContentLoaded', () => {
       const routingRect = routingPanel.getBoundingClientRect();
       const viewportHeight = window.innerHeight;
       const topPadding = 5; // Padding from top
-      const padding = 5; // Padding between panels
+      const padding = 10; // Padding between panels (increased for more space)
       const bottomPadding = 5; // Padding from bottom edge
       
-      // Get attribution control height to avoid overlap
-      const attributionControl = document.querySelector('.maplibregl-ctrl-attrib');
-      const attributionHeight = attributionControl ? attributionControl.offsetHeight : 0;
-      const attributionPadding = attributionHeight > 0 ? 5 : 0; // Extra padding if attribution exists
+      // Get attribution control height to avoid overlap (desktop) or bottom controls/geocoder (mobile)
+      const isMobile = window.innerWidth <= 768;
+      let bottomSpace = 0;
+      let attributionHeight = 0;
+      let attributionPadding = 0;
       
-      // Calculate available space (accounting for top padding, bottom padding, and attribution)
-      const availableViewportHeight = viewportHeight - topPadding - bottomPadding - attributionHeight - attributionPadding;
+      if (isMobile) {
+        // On mobile: account for bottom-left controls and geocoder
+        const bottomControls = document.querySelector('#bottom-left-ui-container');
+        const geocoder = document.querySelector('.geocoder');
+        
+        let controlsSpace = 0;
+        let geocoderSpace = 0;
+        
+        if (bottomControls) {
+          const controlsRect = bottomControls.getBoundingClientRect();
+          // Controls are at bottom: 10px, so space needed = controls height + bottom offset (10px) + padding (10px)
+          controlsSpace = controlsRect.height + 10 + 10; // Height + bottom: 10px + padding: 10px
+        } else {
+          controlsSpace = 70; // Fallback: ~50px controls + 10px bottom + 10px padding
+        }
+        
+        if (geocoder) {
+          const geocoderRect = geocoder.getBoundingClientRect();
+          // Geocoder is at bottom: 40px, so space needed = geocoder height + bottom offset (40px) + padding (10px)
+          geocoderSpace = geocoderRect.height + 40 + 10; // Height + bottom: 40px + padding: 10px
+        } else {
+          geocoderSpace = 100; // Fallback: ~50px geocoder + 40px bottom + 10px padding
+        }
+        
+        // Use the larger value to ensure no overlap with either element
+        bottomSpace = Math.max(controlsSpace, geocoderSpace);
+      } else {
+        // On desktop: account for attribution control
+        const attributionControl = document.querySelector('.maplibregl-ctrl-attrib');
+        attributionHeight = attributionControl ? attributionControl.offsetHeight : 0;
+        attributionPadding = attributionHeight > 0 ? 5 : 0; // Extra padding if attribution exists
+        bottomSpace = attributionHeight + attributionPadding; // Height + padding
+      }
+      
+      // Calculate available space (accounting for top padding, bottom space)
+      const availableViewportHeight = viewportHeight - topPadding - bottomPadding - bottomSpace;
       
       // Calculate available space
       const routingNaturalHeight = routingRect.height;
-      const routingMaxHeight = availableViewportHeight * 0.7; // Max 70% of available space
-      const contextMaxHeight = availableViewportHeight * 0.3; // Max 30% of available space
-      
-      // Check if both panels fit in their natural size
-      const totalNeededHeight = routingNaturalHeight + contextPanel.scrollHeight + padding;
+      const contextNaturalHeight = contextPanel.scrollHeight;
       
       let routingActualMaxHeight, contextActualMaxHeight;
       
-      if (totalNeededHeight <= availableViewportHeight) {
-        // Enough space: both panels get their natural size
-        routingActualMaxHeight = 'none'; // No limit, use natural height
-        contextActualMaxHeight = availableViewportHeight - routingNaturalHeight - padding;
+      // Check if panels are collapsed
+      const isRoutingCollapsed = routingPanel.classList.contains('collapsed');
+      const isContextCollapsed = contextPanel.classList.contains('collapsed');
+      
+      // If routing panel is collapsed, always position context panel directly below it
+      if (isRoutingCollapsed) {
+        // Routing panel is collapsed: context panel goes directly below
+        const totalNeededHeight = routingNaturalHeight + contextPanel.scrollHeight + padding;
+        
+        if (totalNeededHeight <= availableViewportHeight) {
+          // Enough space: both panels get their natural size
+          routingActualMaxHeight = 'none';
+          contextActualMaxHeight = contextPanel.scrollHeight;
+        } else {
+          // Not enough space: limit routing panel
+          const routingMaxHeight = availableViewportHeight - contextPanel.scrollHeight - padding;
+          routingActualMaxHeight = `${routingMaxHeight}px`;
+          contextActualMaxHeight = contextPanel.scrollHeight;
+        }
+      } else if (isMobile) {
+        if (isContextCollapsed) {
+          // Mobile + Collapsed: Position context panel directly below routing panel (like desktop)
+          const totalNeededHeight = routingNaturalHeight + contextPanel.scrollHeight + padding;
+          
+          if (totalNeededHeight <= availableViewportHeight) {
+            // Enough space: both panels get their natural size
+            routingActualMaxHeight = 'none';
+            contextActualMaxHeight = contextPanel.scrollHeight; // Just header height when collapsed
+          } else {
+            // Not enough space: limit routing panel
+            const routingMaxHeight = availableViewportHeight - contextPanel.scrollHeight - padding;
+            routingActualMaxHeight = `${routingMaxHeight}px`;
+            contextActualMaxHeight = contextPanel.scrollHeight;
+          }
+        } else {
+          // Mobile + Expanded: Context panel gets as much space as it needs, positioned as low as possible
+          // Routing panel gets the remaining space
+          
+          // Calculate maximum bottom position for context panel (just above controls/geocoder)
+          const maxBottom = viewportHeight - bottomSpace - bottomPadding;
+          
+          // Context panel should use its natural height if it fits, otherwise use available space
+          if (contextNaturalHeight <= (maxBottom - topPadding - padding)) {
+            // Natural height fits, use it
+            contextActualMaxHeight = contextNaturalHeight;
+          } else {
+            // Natural height doesn't fit, use maximum available space
+            contextActualMaxHeight = maxBottom - topPadding - padding;
+          }
+          
+          // Calculate where context panel should start (from bottom)
+          const contextTop = maxBottom - contextActualMaxHeight;
+          
+          // Routing panel gets the space above context panel
+          const routingMaxHeight = contextTop - topPadding - padding;
+          
+          if (routingNaturalHeight <= routingMaxHeight) {
+            // Routing panel fits in available space
+            routingActualMaxHeight = 'none'; // Use natural height
+          } else {
+            // Routing panel needs to be limited
+            routingActualMaxHeight = `${routingMaxHeight}px`;
+          }
+        }
       } else {
-        // Not enough space: apply limits (routing max 70%, context max 30%)
-        routingActualMaxHeight = `${routingMaxHeight}px`; // Set to 70% of available space
-        contextActualMaxHeight = Math.min(contextMaxHeight, availableViewportHeight - routingMaxHeight - padding);
+        // Desktop: original logic
+        const routingMaxHeight = availableViewportHeight * 0.7;  // Desktop: routing max 70%
+        const contextMaxHeight = availableViewportHeight * 0.3; // Desktop: context max 30%
+        
+        // Check if both panels fit in their natural size
+        const totalNeededHeight = routingNaturalHeight + contextNaturalHeight + padding;
+        
+        if (totalNeededHeight <= availableViewportHeight) {
+          // Enough space: both panels get their natural size
+          routingActualMaxHeight = 'none'; // No limit, use natural height
+          contextActualMaxHeight = availableViewportHeight - routingNaturalHeight - padding;
+        } else {
+          // Not enough space: apply limits
+          routingActualMaxHeight = `${routingMaxHeight}px`;
+          contextActualMaxHeight = Math.min(contextMaxHeight, availableViewportHeight - routingMaxHeight - padding);
+        }
       }
       
       // Apply max-height to routing panel (only if it changed)
@@ -808,30 +890,47 @@ document.addEventListener('DOMContentLoaded', () => {
         const updatedRoutingRect = routingPanel.getBoundingClientRect();
         const routingBottomCalculated = updatedRoutingRect.top + updatedRoutingRect.height;
         
-        // Calculate maximum bottom position (accounting for attribution)
-        const maxBottom = viewportHeight - attributionHeight - attributionPadding - bottomPadding;
-        const contextTop = routingBottomCalculated + padding;
-        const maxContextHeightFromAttribution = Math.max(0, maxBottom - contextTop); // Ensure non-negative
+        // Calculate maximum bottom position (accounting for attribution on desktop, or controls/geocoder on mobile)
+        const maxBottom = viewportHeight - bottomSpace - bottomPadding;
         
-        // Position context panel below routing panel
-        contextPanel.style.top = `${contextTop}px`;
+        let contextTop, finalMaxHeight;
         
-        // Always respect attribution constraint to avoid overlap
-        // Use the smaller of contextActualMaxHeight and maxContextHeightFromAttribution
-        let finalMaxHeight = Math.min(contextActualMaxHeight, maxContextHeightFromAttribution);
+        // Check if routing panel is collapsed
+        const isRoutingCollapsed = routingPanel.classList.contains('collapsed');
         
-        // Ensure minimum height of 100px, but always respect attribution constraint first
-        // If attribution constraint allows it, use at least 100px
-        if (maxContextHeightFromAttribution >= 100) {
-          // Attribution constraint allows minimum height
-          finalMaxHeight = Math.max(100, finalMaxHeight);
+        if (isRoutingCollapsed) {
+          // Routing panel is collapsed: always position context panel directly below it
+          contextTop = routingBottomCalculated + padding;
+          finalMaxHeight = contextActualMaxHeight;
+        } else if (isMobile) {
+          // Check if context panel is collapsed
+          const isContextCollapsed = contextPanel.classList.contains('collapsed');
+          
+          if (isContextCollapsed) {
+            // Mobile + Collapsed: Position context panel directly below routing panel
+            contextTop = routingBottomCalculated + padding;
+            finalMaxHeight = contextActualMaxHeight;
+          } else {
+            // Mobile + Expanded: Position context panel from bottom (as low as possible)
+            // Context panel top is calculated from bottom: maxBottom - contextActualMaxHeight
+            contextTop = maxBottom - contextActualMaxHeight;
+            finalMaxHeight = contextActualMaxHeight;
+          }
         } else {
-          // Attribution constraint is very restrictive: use it even if less than 100px to avoid overlap
-          finalMaxHeight = maxContextHeightFromAttribution;
+          // Desktop: Position context panel below routing panel
+          contextTop = routingBottomCalculated + padding;
+          const maxContextHeightFromAttribution = Math.max(0, maxBottom - contextTop); // Ensure non-negative
+          
+          // Always respect attribution constraint to avoid overlap
+          // Use the smaller of contextActualMaxHeight and maxContextHeightFromAttribution
+          finalMaxHeight = Math.min(contextActualMaxHeight, maxContextHeightFromAttribution);
         }
         
+        // Position context panel
+        contextPanel.style.top = `${contextTop}px`;
         contextPanel.style.maxHeight = `${finalMaxHeight}px`;
-        contextPanel.style.overflowY = 'auto';
+        // Only enable scrolling if content is taller than available space
+        contextPanel.style.overflowY = contextNaturalHeight > finalMaxHeight ? 'auto' : 'visible';
         contextPanel.style.bottom = 'auto';
         contextPanel.style.display = 'block'; // Ensure it's visible
         
@@ -872,6 +971,30 @@ document.addEventListener('DOMContentLoaded', () => {
       resizeTimeout = setTimeout(updateContextPanelPosition, 150);
     });
     
+    // Collapse/expand context panel handler
+    const collapseContextBtn = document.getElementById('collapse-context-panel');
+    if (collapseContextBtn) {
+      collapseContextBtn.addEventListener('click', () => {
+        const isCollapsed = contextPanel.classList.contains('collapsed');
+        if (isCollapsed) {
+          // Expand panel
+          contextPanel.classList.remove('collapsed');
+          collapseContextBtn.classList.remove('collapsed');
+          collapseContextBtn.title = 'Einklappen';
+        } else {
+          // Collapse panel
+          contextPanel.classList.add('collapsed');
+          collapseContextBtn.classList.add('collapsed');
+          collapseContextBtn.title = 'Ausklappen';
+        }
+        
+        // Update panel positioning after collapse/expand
+        setTimeout(() => {
+          updateContextPanelPosition();
+        }, 50);
+      });
+    }
+    
     // Update when routing panel content changes (e.g., route calculated, heightgraph shown)
     // Only observe childList and class changes, not style (to avoid loops)
     const observer = new MutationObserver(() => {
@@ -884,7 +1007,13 @@ document.addEventListener('DOMContentLoaded', () => {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['class'] // Don't observe 'style' to avoid loops
+      attributeFilter: ['class'] // Observe 'class' changes (including collapsed state)
+    });
+    
+    // Also observe context panel class changes
+    observer.observe(contextPanel, {
+      attributes: true,
+      attributeFilter: ['class'] // Observe 'class' changes (including collapsed state)
     });
     
     // Also update when route info changes (heightgraph appears/disappears)
